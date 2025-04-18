@@ -2,76 +2,55 @@ import SwiftUI
 import ReplayKit
 
 struct ContentView: View {
-    @State private var broadcastButton: UIButton?
-    @State private var showAlert = false
+    @State private var broadcastButton: UIButton? = nil
+    @State private var isBroadcasting = false
 
     var body: some View {
         VStack(spacing: 32) {
-            Text("Clash Royale AI Coach")
-                .font(.title)
-                .bold()
+            Text(isBroadcasting ? "🔴 Broadcasting…" : "⚫️ Not Broadcasting")
+                .font(.headline)
 
-            // Big tappable SwiftUI button
             Button(action: {
-                print("📡 Start Streaming tapped")
-                showAlert = true
+                // 1) fire the picker
                 broadcastButton?.sendActions(for: .touchUpInside)
+                // 2) flip our local state so the label updates
+                isBroadcasting.toggle()
             }) {
-                VStack {
-                    Image(systemName: "play.circle.fill")
+                HStack {
+                    Image(systemName: isBroadcasting ? "stop.circle.fill" : "play.circle.fill")
                         .resizable()
-                        .frame(width: 80, height: 80)
-                    Text("Start Streaming")
-                        .font(.headline)
+                        .frame(width: 60, height: 60)
+                    Text(isBroadcasting ? "Stop Streaming" : "Start Streaming")
+                        .font(.title2)
                 }
+                .padding()
             }
-            .buttonStyle(PlainButtonStyle())
-            .padding()
+            .buttonStyle(.borderedProminent)
 
         }
-        .alert("Streaming Started",
-               isPresented: $showAlert,
-               actions: {
-                   Button("OK", role: .cancel) {}
-               },
-               message: {
-                   Text("Your screen broadcast is now live.")
-               }
-        )
         .padding()
-
-        // Hidden picker to get its UIButton reference
-        BroadcastPickerHelper(
-            broadcastExtensionID: "com.elmelz.CRScreenClient.CRScreenClientBroadcast",
-            broadcastButton: $broadcastButton
+        //  Invisible helper that captures the RP picker button
+        .background(
+            BroadcastPickerHelper(
+                extensionID: "com.elmelz.CRScreenClient.CRScreenClientBroadcast",
+                broadcastButton: $broadcastButton
+            )
+            .frame(width: 0, height: 0)
         )
-        .frame(width: 0, height: 0)      // collapse to zero
-        .clipped()                       // ensure it really disappears
-        .allowsHitTesting(false)         // so it never intercepts touches
     }
 }
 
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        ContentView()
-            .previewDevice("iPhone 14 Pro")
-    }
-}
-
-// MARK: – BroadcastPickerHelper
-
-/// A tiny UIViewRepresentable that embeds RPSystemBroadcastPickerView
-/// purely to capture its internal UIButton and hand it back via a Binding.
+/// UIViewRepresentable to expose the RPSystemBroadcastPickerView’s UIButton
 struct BroadcastPickerHelper: UIViewRepresentable {
-    let broadcastExtensionID: String
+    let extensionID: String
     @Binding var broadcastButton: UIButton?
 
     func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
         let picker = RPSystemBroadcastPickerView(frame: .zero)
-        picker.preferredExtension = broadcastExtensionID
+        picker.preferredExtension = extensionID
         picker.showsMicrophoneButton = false
 
-        // Delay until layout so the subviews exist
+        // Capture the internal UIButton once it’s laid out
         DispatchQueue.main.async {
             if let btn = picker.subviews.compactMap({ $0 as? UIButton }).first {
                 broadcastButton = btn
@@ -80,7 +59,5 @@ struct BroadcastPickerHelper: UIViewRepresentable {
         return picker
     }
 
-    func updateUIView(_ uiView: RPSystemBroadcastPickerView, context: Context) {
-        // no-op
-    }
+    func updateUIView(_ uiView: RPSystemBroadcastPickerView, context: Context) {}
 }

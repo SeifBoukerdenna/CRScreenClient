@@ -4,12 +4,15 @@ import CoreImage
 
 class SampleHandler: RPBroadcastSampleHandler {
   // replace 192.168.1.42 with your Mac’s LAN IP and port
-  let uploadURL = URL(string: "http://192.168.2.150:8080/upload")!
+    private var compressionQuality: CGFloat = 0.5
+  let uploadURL = URL(string: "http://172.20.10.3:8080/upload")!
   let session = URLSession(configuration: .default)
 
-  override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
-    // nothing special to do here
-  }
+    override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
+           if let q = setupInfo?["quality"] as? NSNumber {
+               compressionQuality = max(0, min(1, CGFloat(truncating: q)))
+           }
+       }
 
   override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer,
                                     with sampleBufferType: RPSampleBufferType) {
@@ -35,6 +38,6 @@ class SampleHandler: RPBroadcastSampleHandler {
     let context = CIContext()
     guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
     let uiImage = UIImage(cgImage: cgImage)
-    return uiImage.jpegData(compressionQuality: 0.7)
+    return uiImage.jpegData(compressionQuality: 0.5)
   }
 }
