@@ -11,7 +11,7 @@
 		71A1287F2DB218270060F9A9 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71A128742DB218270060F9A9 /* ReplayKit.framework */; };
 		71A128812DB218270060F9A9 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71A128802DB218270060F9A9 /* UIKit.framework */; };
 		71A128882DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 71A1287E2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		71A1288B2DB218270060F9A9 /* CRScreenClientBroadcast.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 71A128722DB218260060F9A9 /* CRScreenClientBroadcast.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		71A1288B2DB218270060F9A9 /* Royal Trainer.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 71A128722DB218260060F9A9 /* Royal Trainer.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,7 +38,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				71A1288B2DB218270060F9A9 /* CRScreenClientBroadcast.appex in Embed Foundation Extensions */,
+				71A1288B2DB218270060F9A9 /* Royal Trainer.appex in Embed Foundation Extensions */,
 				71A128882DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
@@ -47,8 +47,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		71A128572DB216A40060F9A9 /* CRScreenClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CRScreenClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		71A128722DB218260060F9A9 /* CRScreenClientBroadcast.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CRScreenClientBroadcast.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		71A128572DB216A40060F9A9 /* Royal Trainer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Royal Trainer.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		71A128722DB218260060F9A9 /* Royal Trainer.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Royal Trainer.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		71A128742DB218270060F9A9 /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = System/Library/Frameworks/ReplayKit.framework; sourceTree = SDKROOT; };
 		71A1287E2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CRScreenClientBroadcastSetupUI.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		71A128802DB218270060F9A9 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
@@ -147,8 +147,8 @@
 		71A128582DB216A40060F9A9 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				71A128572DB216A40060F9A9 /* CRScreenClient.app */,
-				71A128722DB218260060F9A9 /* CRScreenClientBroadcast.appex */,
+				71A128572DB216A40060F9A9 /* Royal Trainer.app */,
+				71A128722DB218260060F9A9 /* Royal Trainer.appex */,
 				71A1287E2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex */,
 			);
 			name = Products;
@@ -188,7 +188,7 @@
 			packageProductDependencies = (
 			);
 			productName = CRScreenClient;
-			productReference = 71A128572DB216A40060F9A9 /* CRScreenClient.app */;
+			productReference = 71A128572DB216A40060F9A9 /* Royal Trainer.app */;
 			productType = "com.apple.product-type.application";
 		};
 		71A128712DB218260060F9A9 /* CRScreenClientBroadcast */ = {
@@ -210,7 +210,7 @@
 			packageProductDependencies = (
 			);
 			productName = CRScreenClientBroadcast;
-			productReference = 71A128722DB218260060F9A9 /* CRScreenClientBroadcast.appex */;
+			productReference = 71A128722DB218260060F9A9 /* Royal Trainer.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		71A1287D2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */ = {
@@ -471,7 +471,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CRScreenClient/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_CFBundleDisplayName = "Royal Trainer";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app streams screen capture to a local server on your Mac for debugging.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -484,7 +484,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Royal Trainer";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -504,7 +504,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CRScreenClient/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_CFBundleDisplayName = "Royal Trainer";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app streams screen capture to a local server on your Mac for debugging.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -517,7 +517,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Royal Trainer";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -542,7 +542,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient.CRScreenClientBroadcast;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Royal Trainer";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -568,7 +568,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient.CRScreenClientBroadcast;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Royal Trainer";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
