@@ -6,14 +6,101 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		71A128752DB218270060F9A9 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71A128742DB218270060F9A9 /* ReplayKit.framework */; };
+		71A1287F2DB218270060F9A9 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71A128742DB218270060F9A9 /* ReplayKit.framework */; };
+		71A128812DB218270060F9A9 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71A128802DB218270060F9A9 /* UIKit.framework */; };
+		71A128882DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 71A1287E2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		71A1288B2DB218270060F9A9 /* CRScreenClientBroadcast.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 71A128722DB218260060F9A9 /* CRScreenClientBroadcast.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		71A128862DB218270060F9A9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 71A1284F2DB216A40060F9A9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 71A1287D2DB218270060F9A9;
+			remoteInfo = CRScreenClientBroadcastSetupUI;
+		};
+		71A128892DB218270060F9A9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 71A1284F2DB216A40060F9A9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 71A128712DB218260060F9A9;
+			remoteInfo = CRScreenClientBroadcast;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		71A128942DB218270060F9A9 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				71A1288B2DB218270060F9A9 /* CRScreenClientBroadcast.appex in Embed Foundation Extensions */,
+				71A128882DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		71A128572DB216A40060F9A9 /* CRScreenClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CRScreenClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		71A128722DB218260060F9A9 /* CRScreenClientBroadcast.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CRScreenClientBroadcast.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		71A128742DB218270060F9A9 /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = System/Library/Frameworks/ReplayKit.framework; sourceTree = SDKROOT; };
+		71A1287E2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CRScreenClientBroadcastSetupUI.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		71A128802DB218270060F9A9 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		71A1288C2DB218270060F9A9 /* Exceptions for "CRScreenClientBroadcast" folder in "CRScreenClientBroadcast" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 71A128712DB218260060F9A9 /* CRScreenClientBroadcast */;
+		};
+		71A128902DB218270060F9A9 /* Exceptions for "CRScreenClientBroadcastSetupUI" folder in "CRScreenClientBroadcastSetupUI" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 71A1287D2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */;
+		};
+		71A128992DB21D7E0060F9A9 /* Exceptions for "CRScreenClient" folder in "CRScreenClient" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 71A128562DB216A40060F9A9 /* CRScreenClient */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		71A128592DB216A40060F9A9 /* CRScreenClient */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				71A128992DB21D7E0060F9A9 /* Exceptions for "CRScreenClient" folder in "CRScreenClient" target */,
+			);
 			path = CRScreenClient;
+			sourceTree = "<group>";
+		};
+		71A128762DB218270060F9A9 /* CRScreenClientBroadcast */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				71A1288C2DB218270060F9A9 /* Exceptions for "CRScreenClientBroadcast" folder in "CRScreenClientBroadcast" target */,
+			);
+			path = CRScreenClientBroadcast;
+			sourceTree = "<group>";
+		};
+		71A128822DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				71A128902DB218270060F9A9 /* Exceptions for "CRScreenClientBroadcastSetupUI" folder in "CRScreenClientBroadcastSetupUI" target */,
+			);
+			path = CRScreenClientBroadcastSetupUI;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -26,6 +113,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		71A1286F2DB218260060F9A9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				71A128752DB218270060F9A9 /* ReplayKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		71A1287B2DB218270060F9A9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				71A1287F2DB218270060F9A9 /* ReplayKit.framework in Frameworks */,
+				71A128812DB218270060F9A9 /* UIKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -33,6 +137,9 @@
 			isa = PBXGroup;
 			children = (
 				71A128592DB216A40060F9A9 /* CRScreenClient */,
+				71A128762DB218270060F9A9 /* CRScreenClientBroadcast */,
+				71A128822DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */,
+				71A128732DB218270060F9A9 /* Frameworks */,
 				71A128582DB216A40060F9A9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,8 +148,19 @@
 			isa = PBXGroup;
 			children = (
 				71A128572DB216A40060F9A9 /* CRScreenClient.app */,
+				71A128722DB218260060F9A9 /* CRScreenClientBroadcast.appex */,
+				71A1287E2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		71A128732DB218270060F9A9 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				71A128742DB218270060F9A9 /* ReplayKit.framework */,
+				71A128802DB218270060F9A9 /* UIKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -55,10 +173,13 @@
 				71A128532DB216A40060F9A9 /* Sources */,
 				71A128542DB216A40060F9A9 /* Frameworks */,
 				71A128552DB216A40060F9A9 /* Resources */,
+				71A128942DB218270060F9A9 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				71A128872DB218270060F9A9 /* PBXTargetDependency */,
+				71A1288A2DB218270060F9A9 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				71A128592DB216A40060F9A9 /* CRScreenClient */,
@@ -69,6 +190,50 @@
 			productName = CRScreenClient;
 			productReference = 71A128572DB216A40060F9A9 /* CRScreenClient.app */;
 			productType = "com.apple.product-type.application";
+		};
+		71A128712DB218260060F9A9 /* CRScreenClientBroadcast */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 71A1288D2DB218270060F9A9 /* Build configuration list for PBXNativeTarget "CRScreenClientBroadcast" */;
+			buildPhases = (
+				71A1286E2DB218260060F9A9 /* Sources */,
+				71A1286F2DB218260060F9A9 /* Frameworks */,
+				71A128702DB218260060F9A9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				71A128762DB218270060F9A9 /* CRScreenClientBroadcast */,
+			);
+			name = CRScreenClientBroadcast;
+			packageProductDependencies = (
+			);
+			productName = CRScreenClientBroadcast;
+			productReference = 71A128722DB218260060F9A9 /* CRScreenClientBroadcast.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		71A1287D2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 71A128912DB218270060F9A9 /* Build configuration list for PBXNativeTarget "CRScreenClientBroadcastSetupUI" */;
+			buildPhases = (
+				71A1287A2DB218270060F9A9 /* Sources */,
+				71A1287B2DB218270060F9A9 /* Frameworks */,
+				71A1287C2DB218270060F9A9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				71A128822DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */,
+			);
+			name = CRScreenClientBroadcastSetupUI;
+			packageProductDependencies = (
+			);
+			productName = CRScreenClientBroadcastSetupUI;
+			productReference = 71A1287E2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -81,6 +246,12 @@
 				LastUpgradeCheck = 1620;
 				TargetAttributes = {
 					71A128562DB216A40060F9A9 = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					71A128712DB218260060F9A9 = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					71A1287D2DB218270060F9A9 = {
 						CreatedOnToolsVersion = 16.2;
 					};
 				};
@@ -100,12 +271,28 @@
 			projectRoot = "";
 			targets = (
 				71A128562DB216A40060F9A9 /* CRScreenClient */,
+				71A128712DB218260060F9A9 /* CRScreenClientBroadcast */,
+				71A1287D2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		71A128552DB216A40060F9A9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		71A128702DB218260060F9A9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		71A1287C2DB218270060F9A9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +309,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		71A1286E2DB218260060F9A9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		71A1287A2DB218270060F9A9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		71A128872DB218270060F9A9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 71A1287D2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */;
+			targetProxy = 71A128862DB218270060F9A9 /* PBXContainerItemProxy */;
+		};
+		71A1288A2DB218270060F9A9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 71A128712DB218260060F9A9 /* CRScreenClientBroadcast */;
+			targetProxy = 71A128892DB218270060F9A9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		71A128652DB216A80060F9A9 /* Debug */ = {
@@ -252,9 +466,12 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"CRScreenClient/Preview Content\"";
-				DEVELOPMENT_TEAM = 5G8BGW82D9;
+				DEVELOPMENT_TEAM = VZR89A8Z89;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CRScreenClient/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app streams screen capture to a local server on your Mac for debugging.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -265,11 +482,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = elmelz.CRScreenClient;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -281,9 +498,12 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"CRScreenClient/Preview Content\"";
-				DEVELOPMENT_TEAM = 5G8BGW82D9;
+				DEVELOPMENT_TEAM = VZR89A8Z89;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CRScreenClient/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app streams screen capture to a local server on your Mac for debugging.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -294,8 +514,108 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = elmelz.CRScreenClient;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		71A1288E2DB218270060F9A9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VZR89A8Z89;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CRScreenClientBroadcast/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CRScreenClientBroadcast;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient.CRScreenClientBroadcast;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		71A1288F2DB218270060F9A9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VZR89A8Z89;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CRScreenClientBroadcast/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CRScreenClientBroadcast;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient.CRScreenClientBroadcast;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		71A128922DB218270060F9A9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VZR89A8Z89;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CRScreenClientBroadcastSetupUI/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CRScreenClientBroadcastSetupUI;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient.CRScreenClientBroadcastSetupUI;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		71A128932DB218270060F9A9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VZR89A8Z89;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CRScreenClientBroadcastSetupUI/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CRScreenClientBroadcastSetupUI;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient.CRScreenClientBroadcastSetupUI;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -319,6 +639,24 @@
 			buildConfigurations = (
 				71A128682DB216A80060F9A9 /* Debug */,
 				71A128692DB216A80060F9A9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		71A1288D2DB218270060F9A9 /* Build configuration list for PBXNativeTarget "CRScreenClientBroadcast" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				71A1288E2DB218270060F9A9 /* Debug */,
+				71A1288F2DB218270060F9A9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		71A128912DB218270060F9A9 /* Build configuration list for PBXNativeTarget "CRScreenClientBroadcastSetupUI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				71A128922DB218270060F9A9 /* Debug */,
+				71A128932DB218270060F9A9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
