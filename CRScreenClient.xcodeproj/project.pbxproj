@@ -536,7 +536,7 @@
 				DEVELOPMENT_TEAM = VZR89A8Z89;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CRScreenClientBroadcast/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = CRScreenClientBroadcast;
+				INFOPLIST_KEY_CFBundleDisplayName = "Royal Trainer";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -563,7 +563,7 @@
 				DEVELOPMENT_TEAM = VZR89A8Z89;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CRScreenClientBroadcast/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = CRScreenClientBroadcast;
+				INFOPLIST_KEY_CFBundleDisplayName = "Royal Trainer";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
