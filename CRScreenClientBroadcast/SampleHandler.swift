@@ -5,7 +5,7 @@ import CoreImage
 class SampleHandler: RPBroadcastSampleHandler {
   // replace 192.168.1.42 with your Mac’s LAN IP and port
     private var compressionQuality: CGFloat = 0.5
-  let uploadURL = URL(string: "http://172.20.10.3:8080/upload")!
+  let uploadURL = URL(string: "http://192.168.2.150:8080/upload")!
   let session = URLSession(configuration: .default)
 
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
