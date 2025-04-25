@@ -11,22 +11,24 @@ final class BroadcastManager: ObservableObject {
     private let kStartedAtKey = "broadcastStartedAt"
     private let kCodeKey = "sessionCode"
     private var timer: AnyCancellable?
+    
+    // Add last known state to detect changes
+    private var lastKnownBroadcastState = false
 
     // Use a local cache to avoid constant UserDefaults access
     private var cachedStartDate: Date?
     private var cachedCode: String?
 
     private var startDate: Date? {
-        if let cached = cachedStartDate {
-            return cached
-        }
-        
-        // Only read from UserDefaults when needed
+        // Force check UserDefaults every time to detect external changes
         if let defaults = UserDefaults(suiteName: groupID),
            let date = defaults.object(forKey: kStartedAtKey) as? Date {
             cachedStartDate = date
             return date
         }
+        
+        // If not in UserDefaults, clear the cache too
+        cachedStartDate = nil
         return nil
     }
 
@@ -34,7 +36,8 @@ final class BroadcastManager: ObservableObject {
         // Setup initial state
         setupInitialState()
         
-        timer = Timer.publish(every: 1, on: .main, in: .common)
+        // Use a faster timer to detect broadcast stop
+        timer = Timer.publish(every: 0.5, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in self?.tick() }
     }
@@ -48,6 +51,7 @@ final class BroadcastManager: ObservableObject {
             if let date = defaults.object(forKey: kStartedAtKey) as? Date {
                 cachedStartDate = date
                 isBroadcasting = true
+                lastKnownBroadcastState = true
                 elapsed = Date().timeIntervalSince(date)
             }
         }
@@ -69,39 +73,55 @@ final class BroadcastManager: ObservableObject {
     }
 
     private func tick() {
-        refreshState()
-        if isBroadcasting, startDate == nil {
-            let now = Date()
-            cachedStartDate = now
-            
-            // Write to UserDefaults on a background thread
-            DispatchQueue.global(qos: .utility).async { [weak self] in
-                guard let self = self else { return }
-                UserDefaults(suiteName: self.groupID)?.set(now, forKey: self.kStartedAtKey)
+        // Get current state from storage (this will check UserDefaults)
+        let currentDate = startDate
+        let currentBroadcastState = currentDate != nil
+        
+        // If state changed from broadcasting to not broadcasting, handle it
+        if lastKnownBroadcastState && !currentBroadcastState {
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("Detected broadcast stopped externally")
             }
-            
+            resetBroadcastState()
+        }
+        
+        // Update last known state
+        lastKnownBroadcastState = currentBroadcastState
+        
+        // If broadcasting but no cached date, update it
+        if isBroadcasting, cachedStartDate == nil, let date = currentDate {
+            cachedStartDate = date
+            elapsed = Date().timeIntervalSince(date)
+        }
+        // If broadcasting and have cached date, update elapsed time
+        else if isBroadcasting, let s = cachedStartDate {
+            elapsed = Date().timeIntervalSince(s)
+        }
+        // If not broadcasting, make sure elapsed is 0
+        else if !isBroadcasting {
             elapsed = 0
         }
-        else if let s = startDate {
-            elapsed = Date().timeIntervalSince(s)
+        
+        // Check if we got out of sync
+        if isBroadcasting != currentBroadcastState {
+            isBroadcasting = currentBroadcastState
         }
     }
 
-    private func refreshState() {
-        isBroadcasting = (startDate != nil)
-        if !isBroadcasting { elapsed = 0 }
-    }
-    
     // Method to clear state when needed
     func resetBroadcastState() {
-        cachedStartDate = nil
+        if Constants.FeatureFlags.enableDebugLogging {
+            print("Resetting broadcast state")
+        }
         
-        // Write to UserDefaults on a background thread
+        cachedStartDate = nil
+        isBroadcasting = false
+        elapsed = 0
+        
+        // Remove from UserDefaults too
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
             UserDefaults(suiteName: self.groupID)?.removeObject(forKey: self.kStartedAtKey)
         }
-        
-        refreshState()
     }
 }
