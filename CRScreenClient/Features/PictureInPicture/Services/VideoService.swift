@@ -12,7 +12,7 @@ class VideoService {
         
         if !useLocalOnly, let url = URL(string: Constants.URLs.demoVideo) {
             // Create asset
-            let asset = AVAsset(url: url)
+            let asset = AVURLAsset(url: url)
             
             Task {
                 do {
