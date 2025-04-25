@@ -10,6 +10,7 @@ struct MainScreen: View {
     @State private var player = AVPlayer()
     @State private var isVideoPrepared = false
     @State private var shouldSetupVideo = false
+    @State private var showQualitySettings = false
     
     @Environment(\.scenePhase) private var phase
     
@@ -17,12 +18,12 @@ struct MainScreen: View {
         ZStack {
             // Background
             LinearGradient(
-                colors: [.crBlue, .crBlue.opacity(0.7)],
+                colors: [.crBlue, Color(red: 0, green: 0.1, blue: 0.3)],
                 startPoint: .top, endPoint: .bottom
             )
             .ignoresSafeArea()
             
-            VStack(spacing: 28) {
+            VStack(spacing: 20) {
                 // Player View
                 if broadcastManager.isBroadcasting {
                     videoPlayerSection
@@ -34,15 +35,23 @@ struct MainScreen: View {
                 // Session Code
                 if broadcastManager.isBroadcasting {
                     sessionCodeSection
+                    GuideCard()
+                    
                 }
                 
-                // Guide
-                GuideCard()
+                // Quality selector button (before broadcast)
+                if !broadcastManager.isBroadcasting {
+                    qualityButton
+                }
                 
                 // Action buttons
                 actionButtonsSection
             }
             .padding(.horizontal)
+            .sheet(isPresented: $showQualitySettings) {
+                QualitySelector(selectedQuality: $broadcastManager.qualityLevel)
+                    .interactiveDismissDisabled()
+            }
         }
         .background(
             BroadcastPickerHelper(
@@ -66,7 +75,7 @@ struct MainScreen: View {
     // MARK: - View Components
     
     private var videoPlayerSection: some View {
-        Group {
+        VStack(spacing: 0) {
             if isVideoPrepared {
                 PlayerView(player: player) { layer in
                     if Constants.FeatureFlags.enablePictureInPicture {
@@ -98,7 +107,40 @@ struct MainScreen: View {
                     )
                     .padding(.horizontal)
             }
+            
+            // Quality indicator during broadcast
+            if broadcastManager.isBroadcasting {
+                qualityIndicator
+                    .padding(.top, 6)
+            }
         }
+    }
+    
+    private var qualityIndicator: some View {
+        HStack(spacing: 4) {
+            let quality = broadcastManager.qualityLevel
+            Image(systemName: quality.icon)
+                .font(.system(size: 16))
+                .foregroundColor(quality.color)
+            
+            Text("Streaming Quality: ")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white.opacity(0.9))
+            
+            Text(quality.title)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(quality.color)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(Color.black.opacity(0.3))
+                .overlay(
+                    Capsule()
+                        .strokeBorder(broadcastManager.qualityLevel.color.opacity(0.5), lineWidth: 1)
+                )
+        )
     }
     
     private var statusSection: some View {
@@ -128,7 +170,56 @@ struct MainScreen: View {
                     design: .monospaced
                 ))
                 .foregroundColor(.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.crGold.opacity(0.5), lineWidth: 2)
+                        .blur(radius: 4)
+                        .opacity(0.7)
+                        .mask(
+                            Text(broadcastManager.code)
+                                .font(.system(
+                                    size: 48,
+                                    weight: .heavy,
+                                    design: .monospaced
+                                ))
+                                .foregroundColor(.white)
+                        )
+                )
         }
+    }
+    
+    private var qualityButton: some View {
+        Button(action: {
+            showQualitySettings = true
+        }) {
+            HStack(spacing: 8) {
+                let quality = broadcastManager.qualityLevel
+                Image(systemName: quality.icon)
+                    .font(.system(size: 18))
+                    .foregroundColor(quality.color)
+                
+                Text("Quality: \(quality.title)")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.8))
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(
+                Capsule()
+                    .fill(Color.crNavy.opacity(0.7))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(broadcastManager.qualityLevel.color.opacity(0.5), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.4), radius: 3, x: 0, y: 2)
+            )
+        }
+        .buttonStyle(ClashRoyaleButtonStyle())
+        .padding(.top, -8)
     }
     
     private var actionButtonsSection: some View {

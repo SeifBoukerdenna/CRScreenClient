@@ -78,6 +78,22 @@
 			);
 			target = 71A128562DB216A40060F9A9 /* CRScreenClient */;
 		};
+		71F6EA692DBBFBE100789B5E /* Exceptions for "CRScreenClient" folder in "CRScreenClientBroadcast" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Core/Extensions/Color+Extensions.swift",
+				CRShared.swift,
+			);
+			target = 71A128712DB218260060F9A9 /* CRScreenClientBroadcast */;
+		};
+		71F6EA6A2DBBFBE100789B5E /* Exceptions for "CRScreenClient" folder in "CRScreenClientBroadcastSetupUI" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Core/Extensions/Color+Extensions.swift",
+				CRShared.swift,
+			);
+			target = 71A1287D2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -85,6 +101,8 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				71A128992DB21D7E0060F9A9 /* Exceptions for "CRScreenClient" folder in "CRScreenClient" target */,
+				71F6EA692DBBFBE100789B5E /* Exceptions for "CRScreenClient" folder in "CRScreenClientBroadcast" target */,
+				71F6EA6A2DBBFBE100789B5E /* Exceptions for "CRScreenClient" folder in "CRScreenClientBroadcastSetupUI" target */,
 			);
 			path = CRScreenClient;
 			sourceTree = "<group>";

@@ -15,6 +15,13 @@ class SampleHandler: RPBroadcastSampleHandler {
     // MARK: – Encoding
     private var compressionQuality: CGFloat = 0.6
     private var frameSkip = 1
+    private var downsizeFactor: CGFloat = 0.8 // Default is medium quality
+    
+    // Thresholds for image resizing based on quality
+    private let highQualityThreshold: Int = 1600
+    private let mediumQualityThreshold: Int = 1280
+    private let lowQualityThreshold: Int = 960
+    
     private let ciCtx = CIContext(options: [.workingColorSpace: NSNull()])
 
     // MARK: – State
@@ -22,31 +29,37 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var lastLog = Date()
     private var processed = 0
 
-    // App Group
+    // App Group
     private let groupID = "group.com.elmelz.crcoach"
     private let kStartedAtKey = "broadcastStartedAt"
-    private let kCodeKey      = "sessionCode"
-    private var sessionCode   = "0000"
+    private let kCodeKey = "sessionCode"
+    private let kQualityKey = "streamQuality"
+    private var sessionCode = "0000"
+    private var qualityLevel = "medium" // Default quality level
 
-    // MARK: – Lifecycle
+    // MARK: – Lifecycle
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
         // 1) retrieve saved 4‑digit code
-        sessionCode = UserDefaults(suiteName: groupID)?
-            .string(forKey: kCodeKey) ?? "0000"
-        uploadURL = URL(string:
-            "http://192.168.2.150:8080/upload/\(sessionCode)")!
+        let defaults = UserDefaults(suiteName: groupID)
+        sessionCode = defaults?.string(forKey: kCodeKey) ?? "0000"
+        
+        // Get the server URL
+        let serverBase = "http://172.20.10.3:8080/upload/"
+        uploadURL = URL(string: "\(serverBase)\(sessionCode)") ?? uploadURL
 
-        // 2) parse quality level (unchanged)
-        if let level = setupInfo?["qualityLevel"] as? String {
-            switch level {
-            case "low":   compressionQuality = 0.3; frameSkip = 2
-            case "high":  compressionQuality = 0.7; frameSkip = 0
-            default:      compressionQuality = 0.6; frameSkip = 1
-            }
+        // 2) Get quality level from UserDefaults or setupInfo
+        if let savedQuality = defaults?.string(forKey: kQualityKey) {
+            qualityLevel = savedQuality
+        } else if let quality = setupInfo?["qualityLevel"] as? String {
+            qualityLevel = quality
         }
-        UserDefaults(suiteName: groupID)?
-            .set(Date(), forKey: kStartedAtKey)
-        NSLog("Broadcast started (code \(sessionCode))")
+        
+        // Apply quality settings
+        applyQualitySettings(qualityLevel)
+        
+        defaults?.set(Date(), forKey: kStartedAtKey)
+        NSLog("Broadcast started (code \(sessionCode), quality \(qualityLevel))")
+        NSLog("Upload URL: \(uploadURL.absoluteString)")
     }
 
     override func processSampleBuffer(_ sb: CMSampleBuffer,
@@ -59,8 +72,10 @@ class SampleHandler: RPBroadcastSampleHandler {
         processed += 1
         let now = Date()
         if now.timeIntervalSince(lastLog) > 5 {
-            NSLog("Sending %.1f FPS, Q=%.2f", Double(processed) /
-                  now.timeIntervalSince(lastLog), compressionQuality)
+            NSLog("Sending %.1f FPS, Q=%.2f, Quality Level=%@",
+                  Double(processed) / now.timeIntervalSince(lastLog),
+                  compressionQuality,
+                  qualityLevel)
             processed = 0; lastLog = now
         }
 
@@ -69,6 +84,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         var req = URLRequest(url: uploadURL)
         req.httpMethod = "POST"
         req.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        req.setValue(qualityLevel, forHTTPHeaderField: "X-Quality-Level")
         let task = session.uploadTask(with: req, from: jpeg)
         task.priority = URLSessionTask.highPriority
         task.resume()
@@ -77,6 +93,24 @@ class SampleHandler: RPBroadcastSampleHandler {
     override func broadcastFinished() {
         NSLog("Broadcast finished")
         UserDefaults(suiteName: groupID)?.removeObject(forKey: kStartedAtKey)
+    }
+    
+    // MARK: - Quality Settings
+    private func applyQualitySettings(_ quality: String) {
+        switch quality {
+        case "low":
+            compressionQuality = 0.3
+            frameSkip = 2
+            downsizeFactor = 0.6
+        case "high":
+            compressionQuality = 0.85
+            frameSkip = 0
+            downsizeFactor = 1.0
+        default: // medium
+            compressionQuality = 0.6
+            frameSkip = 1
+            downsizeFactor = 0.8
+        }
     }
 
     // MARK: – Helpers
@@ -88,13 +122,32 @@ class SampleHandler: RPBroadcastSampleHandler {
         let w = CVPixelBufferGetWidth(pix)
         let h = CVPixelBufferGetHeight(pix)
         let ci = CIImage(cvPixelBuffer: pix)
-
-        let down = compressionQuality > 0.6 ? 1280 : 1600
-        let img = (w > down || h > down)
-            ? ci.transformed(by: CGAffineTransform(
-                scaleX: Double(down) / Double(max(w, h)),
-                y: Double(down) / Double(max(w, h))))
-            : ci
+        
+        // Resize threshold depends on quality level
+        let threshold: Int
+        switch qualityLevel {
+        case "low": threshold = lowQualityThreshold
+        case "high": threshold = highQualityThreshold
+        default: threshold = mediumQualityThreshold
+        }
+        
+        // Apply resize if needed
+        let img: CIImage
+        if w > threshold || h > threshold {
+            let scaleFactor = CGFloat(threshold) / CGFloat(max(w, h)) * downsizeFactor
+            img = ci.transformed(by: CGAffineTransform(
+                scaleX: scaleFactor,
+                y: scaleFactor
+            ))
+        } else if downsizeFactor < 1.0 {
+            // Apply downsizing even for smaller images in low/medium quality
+            img = ci.transformed(by: CGAffineTransform(
+                scaleX: downsizeFactor,
+                y: downsizeFactor
+            ))
+        } else {
+            img = ci
+        }
 
         guard let cg = ciCtx.createCGImage(img, from: img.extent) else { return nil }
         return UIImage(cgImage: cg).jpegData(compressionQuality: compressionQuality)

@@ -6,10 +6,12 @@ final class BroadcastManager: ObservableObject {
     @Published private(set) var isBroadcasting = false
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var code: String = "— — — —"
+    @Published var qualityLevel: StreamQuality = .medium
 
     private let groupID = "group.com.elmelz.crcoach"
     private let kStartedAtKey = "broadcastStartedAt"
     private let kCodeKey = "sessionCode"
+    private let kQualityKey = "streamQuality"
     private var timer: AnyCancellable?
     
     // Add last known state to detect changes
@@ -40,13 +42,28 @@ final class BroadcastManager: ObservableObject {
         timer = Timer.publish(every: 0.5, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in self?.tick() }
+            
+        // Listen for quality changes to save them
+        $qualityLevel
+            .dropFirst() // Don't trigger on initial value
+            .sink { [weak self] newQuality in
+                self?.saveQualitySettings(newQuality)
+            }
+            .store(in: &cancellables)
     }
+    
+    private var cancellables = Set<AnyCancellable>()
     
     private func setupInitialState() {
         // Initialize cached values from UserDefaults
         if let defaults = UserDefaults(suiteName: groupID) {
             cachedCode = defaults.string(forKey: kCodeKey) ?? code
             code = cachedCode ?? code
+            
+            if let qualityString = defaults.string(forKey: kQualityKey),
+               let savedQuality = StreamQuality(rawValue: qualityString) {
+                qualityLevel = savedQuality
+            }
             
             if let date = defaults.object(forKey: kStartedAtKey) as? Date {
                 cachedStartDate = date
@@ -69,6 +86,19 @@ final class BroadcastManager: ObservableObject {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
             UserDefaults(suiteName: self.groupID)?.set(newCode, forKey: self.kCodeKey)
+        }
+    }
+    
+    /// Save quality settings to UserDefaults
+    private func saveQualitySettings(_ quality: StreamQuality) {
+        if Constants.FeatureFlags.enableDebugLogging {
+            print("Setting quality level to: \(quality.rawValue)")
+        }
+        
+        // Save to UserDefaults
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            UserDefaults(suiteName: self.groupID)?.set(quality.rawValue, forKey: self.kQualityKey)
         }
     }
 
