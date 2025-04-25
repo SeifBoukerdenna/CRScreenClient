@@ -13,11 +13,19 @@ final class PiPManager: ObservableObject {
     
     /// Initialize PiP manager with a video player layer
     func setup(with playerLayer: AVPlayerLayer) {
+        // Check if feature is enabled
+        guard Constants.FeatureFlags.enablePictureInPicture else {
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("PiP setup skipped - feature is disabled")
+            }
+            return
+        }
+        
         self.playerLayer = playerLayer
         
         // Check if PiP is supported on this device
         if AVPictureInPictureController.isPictureInPictureSupported() {
-            // Configure audio session for background playback - do this once at app startup
+            // Configure audio session for background playback
             configureAudioSession()
             
             // Create PiP controller with proper configuration
@@ -27,6 +35,10 @@ final class PiPManager: ObservableObject {
             // Force update the PiP possible state after a short delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 self?.isPiPPossible = self?.pipController?.isPictureInPicturePossible ?? false
+                
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("PiP possible: \(self?.isPiPPossible ?? false)")
+                }
             }
             
             // Observe PiP state changes
@@ -34,6 +46,10 @@ final class PiPManager: ObservableObject {
                 guard let isActive = change.newValue else { return }
                 DispatchQueue.main.async {
                     self?.isPiPActive = isActive
+                    
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        print("PiP active state changed: \(isActive)")
+                    }
                 }
             }
             
@@ -45,7 +61,9 @@ final class PiPManager: ObservableObject {
                 }
             }
         } else {
-            NSLog("PiP is not supported on this device")
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("PiP is not supported on this device")
+            }
         }
     }
     
@@ -55,14 +73,23 @@ final class PiPManager: ObservableObject {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            NSLog("Failed to set audio session category: \(error)")
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("Failed to set audio session category: \(error)")
+            }
         }
     }
     
     /// Start Picture-in-Picture if possible
     func startPiP() {
+        // Check if feature is enabled
+        guard Constants.FeatureFlags.enablePictureInPicture else {
+            return
+        }
+        
         guard let pipController = pipController, pipController.isPictureInPicturePossible else {
-            NSLog("PiP not possible at this moment")
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("PiP not possible at this moment")
+            }
             return
         }
         
@@ -71,6 +98,11 @@ final class PiPManager: ObservableObject {
     
     /// Stop Picture-in-Picture if active
     func stopPiP() {
+        // Check if feature is enabled
+        guard Constants.FeatureFlags.enablePictureInPicture else {
+            return
+        }
+        
         guard let pipController = pipController, pipController.isPictureInPictureActive else {
             return
         }
@@ -80,6 +112,11 @@ final class PiPManager: ObservableObject {
     
     /// Toggle Picture-in-Picture state
     func togglePiP() {
+        // Check if feature is enabled
+        guard Constants.FeatureFlags.enablePictureInPicture else {
+            return
+        }
+        
         if isPiPActive {
             stopPiP()
         } else {

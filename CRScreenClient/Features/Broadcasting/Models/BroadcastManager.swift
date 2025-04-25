@@ -93,7 +93,7 @@ final class BroadcastManager: ObservableObject {
     }
     
     // Method to clear state when needed
-    func clearState() {
+    func resetBroadcastState() {
         cachedStartDate = nil
         
         // Write to UserDefaults on a background thread

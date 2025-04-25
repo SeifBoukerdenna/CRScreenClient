@@ -10,11 +10,13 @@ struct BroadcastPickerHelper: UIViewRepresentable {
         let picker = RPSystemBroadcastPickerView(frame: .zero)
         picker.preferredExtension = extensionID
         picker.showsMicrophoneButton = false
+        
         DispatchQueue.main.async {
             broadcastButton = picker.subviews
                 .compactMap { $0 as? UIButton }
                 .first
         }
+        
         return picker
     }
 

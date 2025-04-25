@@ -25,7 +25,7 @@ struct PlayerView: UIViewRepresentable {
             // Notify that layer was created
             onLayerCreated?(playerLayer)
             
-            // Add observer for layout changes - using KVO instead of notification
+            // Add observer for layout changes using KVO
             uiView.layer.addObserver(context.coordinator, forKeyPath: "bounds", options: .new, context: nil)
         }
     }
