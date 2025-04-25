@@ -12,6 +12,7 @@
 		71A128812DB218270060F9A9 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71A128802DB218270060F9A9 /* UIKit.framework */; };
 		71A128882DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 71A1287E2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		71A1288B2DB218270060F9A9 /* Royal Trainer Broadcast.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 71A128722DB218260060F9A9 /* Royal Trainer Broadcast.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		71D454CD2DBB5085005FA168 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71D454CB2DBB4EE3005FA168 /* AVFoundation.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,6 +53,7 @@
 		71A128742DB218270060F9A9 /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = System/Library/Frameworks/ReplayKit.framework; sourceTree = SDKROOT; };
 		71A1287E2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CRScreenClientBroadcastSetupUI.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		71A128802DB218270060F9A9 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		71D454CB2DBB4EE3005FA168 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -110,6 +112,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				71D454CD2DBB5085005FA168 /* AVFoundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,6 +160,7 @@
 		71A128732DB218270060F9A9 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				71D454CB2DBB4EE3005FA168 /* AVFoundation.framework */,
 				71A128742DB218270060F9A9 /* ReplayKit.framework */,
 				71A128802DB218270060F9A9 /* UIKit.framework */,
 			);

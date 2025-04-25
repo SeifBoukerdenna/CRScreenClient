@@ -17,7 +17,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "71A128712DB218260060F9A9"
-               BuildableName = "CRScreenClientBroadcast.appex"
+               BuildableName = "Royal Trainer Broadcast.appex"
                BlueprintName = "CRScreenClientBroadcast"
                ReferencedContainer = "container:CRScreenClient.xcodeproj">
             </BuildableReference>
@@ -31,7 +31,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "71A128562DB216A40060F9A9"
-               BuildableName = "CRScreenClient.app"
+               BuildableName = "Royal Trainer.app"
                BlueprintName = "CRScreenClient"
                ReferencedContainer = "container:CRScreenClient.xcodeproj">
             </BuildableReference>
@@ -62,7 +62,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "71A128562DB216A40060F9A9"
-            BuildableName = "CRScreenClient.app"
+            BuildableName = "Royal Trainer.app"
             BlueprintName = "CRScreenClient"
             ReferencedContainer = "container:CRScreenClient.xcodeproj">
          </BuildableReference>
@@ -81,7 +81,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "71A128562DB216A40060F9A9"
-            BuildableName = "CRScreenClient.app"
+            BuildableName = "Royal Trainer.app"
             BlueprintName = "CRScreenClient"
             ReferencedContainer = "container:CRScreenClient.xcodeproj">
          </BuildableReference>

@@ -7,5 +7,12 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+        <string>processing</string>
+    </array>
+    <key>NSPictureInPictureUsageDescription</key>
+    <string>Allow Picture in Picture to continue viewing your broadcast while using other apps</string>
 </dict>
 </plist>
