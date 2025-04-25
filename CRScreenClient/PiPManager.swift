@@ -1,8 +1,7 @@
-// PiPManager.swift
-
 import SwiftUI
 import AVKit
 
+/// Manages Picture-in-Picture functionality
 final class PiPManager: ObservableObject {
     @Published private(set) var isPiPActive = false
     @Published private(set) var isPiPPossible = false
@@ -18,13 +17,8 @@ final class PiPManager: ObservableObject {
         
         // Check if PiP is supported on this device
         if AVPictureInPictureController.isPictureInPictureSupported() {
-            // Configure audio session for background playback
-            do {
-                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-                try AVAudioSession.sharedInstance().setActive(true)
-            } catch {
-                NSLog("Failed to set audio session category: \(error)")
-            }
+            // Configure audio session for background playback - do this once at app startup
+            configureAudioSession()
             
             // Create PiP controller with proper configuration
             pipController = AVPictureInPictureController(playerLayer: playerLayer)
@@ -52,6 +46,16 @@ final class PiPManager: ObservableObject {
             }
         } else {
             NSLog("PiP is not supported on this device")
+        }
+    }
+    
+    private func configureAudioSession() {
+        // Configure this once and handle errors properly
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            NSLog("Failed to set audio session category: \(error)")
         }
     }
     

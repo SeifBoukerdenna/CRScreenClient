@@ -7,25 +7,50 @@ final class BroadcastManager: ObservableObject {
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var code: String = "— — — —"
 
-    private let groupID       = "group.com.elmelz.crcoach"
+    private let groupID = "group.com.elmelz.crcoach"
     private let kStartedAtKey = "broadcastStartedAt"
-    private let kCodeKey      = "sessionCode"
+    private let kCodeKey = "sessionCode"
     private var timer: AnyCancellable?
 
+    // Use a local cache to avoid constant UserDefaults access
+    private var cachedStartDate: Date?
+    private var cachedCode: String?
+
     private var startDate: Date? {
-        UserDefaults(suiteName: groupID)?
-            .object(forKey: kStartedAtKey) as? Date
+        if let cached = cachedStartDate {
+            return cached
+        }
+        
+        // Only read from UserDefaults when needed
+        if let defaults = UserDefaults(suiteName: groupID),
+           let date = defaults.object(forKey: kStartedAtKey) as? Date {
+            cachedStartDate = date
+            return date
+        }
+        return nil
     }
 
     init() {
-        // recover code if already live
-        code = UserDefaults(suiteName: groupID)?
-            .string(forKey: kCodeKey) ?? code
-
-        refreshState()
+        // Setup initial state
+        setupInitialState()
+        
         timer = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in self?.tick() }
+    }
+    
+    private func setupInitialState() {
+        // Initialize cached values from UserDefaults
+        if let defaults = UserDefaults(suiteName: groupID) {
+            cachedCode = defaults.string(forKey: kCodeKey) ?? code
+            code = cachedCode ?? code
+            
+            if let date = defaults.object(forKey: kStartedAtKey) as? Date {
+                cachedStartDate = date
+                isBroadcasting = true
+                elapsed = Date().timeIntervalSince(date)
+            }
+        }
     }
 
     func stopIfNeeded() { /* no-op until Apple exposes stop API */ }
@@ -34,15 +59,27 @@ final class BroadcastManager: ObservableObject {
     func prepareNewCode() {
         let newCode = String(format: "%04d", Int.random(in: 0...9999))
         code = newCode
-        UserDefaults(suiteName: groupID)?
-            .set(newCode, forKey: kCodeKey)
+        cachedCode = newCode
+        
+        // Write to UserDefaults on a background thread
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            UserDefaults(suiteName: self.groupID)?.set(newCode, forKey: self.kCodeKey)
+        }
     }
 
     private func tick() {
         refreshState()
         if isBroadcasting, startDate == nil {
-            UserDefaults(suiteName: groupID)?
-                .set(Date(), forKey: kStartedAtKey)
+            let now = Date()
+            cachedStartDate = now
+            
+            // Write to UserDefaults on a background thread
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                guard let self = self else { return }
+                UserDefaults(suiteName: self.groupID)?.set(now, forKey: self.kStartedAtKey)
+            }
+            
             elapsed = 0
         }
         else if let s = startDate {
@@ -53,5 +90,18 @@ final class BroadcastManager: ObservableObject {
     private func refreshState() {
         isBroadcasting = (startDate != nil)
         if !isBroadcasting { elapsed = 0 }
+    }
+    
+    // Method to clear state when needed
+    func clearState() {
+        cachedStartDate = nil
+        
+        // Write to UserDefaults on a background thread
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            UserDefaults(suiteName: self.groupID)?.removeObject(forKey: self.kStartedAtKey)
+        }
+        
+        refreshState()
     }
 }

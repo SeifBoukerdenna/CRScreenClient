@@ -7,7 +7,9 @@ struct ContentView: View {
     @StateObject private var pipManager = PiPManager()
     @State private var broadcastButton: UIButton?
     @State private var player = AVPlayer()
-    @State private var playerLayer: AVPlayerLayer?
+    @State private var isVideoPrepared = false
+    @State private var shouldSetupVideo = false
+    
     @Environment(\.scenePhase) private var phase
     
     var body: some View {
@@ -21,17 +23,35 @@ struct ContentView: View {
             VStack(spacing: 28) {
                 // Player View for PiP (hidden when not broadcasting)
                 if bm.isBroadcasting {
-                    PlayerView(player: player) { layer in
-                        self.playerLayer = layer
-                        pipManager.setup(with: layer)
+                    if isVideoPrepared {
+                        PlayerView(player: player) { layer in
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                pipManager.setup(with: layer)
+                            }
+                        }
+                        .frame(height: 200)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.crGold, lineWidth: 2)
+                        )
+                        .padding(.horizontal)
+                    } else {
+                        // Placeholder until video is prepared
+                        Rectangle()
+                            .fill(Color.black.opacity(0.8))
+                            .frame(height: 200)
+                            .cornerRadius(12)
+                            .overlay(
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.crGold, lineWidth: 2)
+                            )
+                            .padding(.horizontal)
                     }
-                    .frame(height: 200)
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.crGold, lineWidth: 2)
-                    )
-                    .padding(.horizontal)
                 }
                 
                 // LIVE / OFFLINE pills
@@ -88,8 +108,8 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 
-                // PiP Button (only shown when broadcasting)
-                if bm.isBroadcasting {
+                // PiP Button (only shown when broadcasting and video is prepared)
+                if bm.isBroadcasting && isVideoPrepared {
                     Button(action: {
                         pipManager.togglePiP()
                     }) {
@@ -122,52 +142,86 @@ struct ContentView: View {
             .frame(width: 0, height: 0)
         )
         .onAppear {
-            // Set up initial state if needed
-            if bm.isBroadcasting {
-                setupDemoVideo()
+            // Check initial state
+            if bm.isBroadcasting && !isVideoPrepared {
+                shouldSetupVideo = true
             }
         }
-        .onChange(of: phase) { newValue in
+        .onChange(of: phase) { _, newValue in
             if newValue == .background {
                 bm.stopIfNeeded()
             }
         }
-        .onChange(of: bm.isBroadcasting) { newValue in
+        .onChange(of: bm.isBroadcasting) { _, newValue in
             if newValue {
-                // Create a simple looped video for demo purposes
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    setupDemoVideo()
-                }
+                // Mark that we should set up the video, but don't do it during view update
+                shouldSetupVideo = true
+                isVideoPrepared = false
             } else {
                 player.pause()
+                isVideoPrepared = false
+            }
+        }
+        .onChange(of: shouldSetupVideo) { _, newValue in
+            if newValue {
+                // This change happens after the view update is complete
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    setupDemoVideo()
+                    shouldSetupVideo = false
+                }
             }
         }
     }
     
     private func setupDemoVideo() {
-        // For testing purposes, create a simple video with a direct URL
-        // This is a more reliable approach than trying to access bundle resources
-        
-        // Create a video URL that's publicly accessible - using a test video
+        // Use a reliable sample video for testing
         let urlString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-        if let url = URL(string: urlString) {
-            let item = AVPlayerItem(url: url)
-            player.replaceCurrentItem(with: item)
-            player.play()
-            player.actionAtItemEnd = .none
-            
-            // Loop the video
-            NotificationCenter.default.addObserver(
-                forName: .AVPlayerItemDidPlayToEndTime,
-                object: player.currentItem,
-                queue: .main
-            ) { _ in
-                player.seek(to: .zero)
-                player.play()
-            }
-        } else {
-            // Fallback to generating a local color video if URL fails
+        
+        guard let url = URL(string: urlString) else {
             createColorVideoItem()
+            return
+        }
+        
+        // Create asset
+        let asset = AVURLAsset(url: url)
+        
+        // iOS 17+ approach using modern async/await APIs
+        Task {
+            do {
+                // Load the playable status asynchronously
+                let isPlayable = try await asset.load(.isPlayable)
+                
+                if isPlayable {
+                    // Create player item and set it on main thread
+                    let playerItem = AVPlayerItem(asset: asset)
+                    
+                    await MainActor.run {
+                        // Set up observers before playing using closure-based notification
+                        NotificationCenter.default.addObserver(
+                            forName: .AVPlayerItemDidPlayToEndTime,
+                            object: playerItem,
+                            queue: .main
+                        ) { [self] _ in
+                            player.seek(to: .zero)
+                            player.play()
+                        }
+                        
+                        self.player.replaceCurrentItem(with: playerItem)
+                        self.player.play()
+                        self.player.actionAtItemEnd = .none
+                        self.isVideoPrepared = true
+                    }
+                } else {
+                    await MainActor.run {
+                        self.createColorVideoItem()
+                    }
+                }
+            } catch {
+                print("Error loading asset: \(error)")
+                await MainActor.run {
+                    self.createColorVideoItem()
+                }
+            }
         }
     }
     
@@ -218,20 +272,22 @@ struct ContentView: View {
             player.play()
             player.actionAtItemEnd = .none
             
-            // Loop the video
+            // Loop the video using closure-based notification
             NotificationCenter.default.addObserver(
                 forName: .AVPlayerItemDidPlayToEndTime,
                 object: player.currentItem,
                 queue: .main
-            ) { _ in
+            ) { [self] _ in
                 player.seek(to: .zero)
                 player.play()
             }
+            
+            // Update state after successful video creation
+            isVideoPrepared = true
         }
     }
     
     private func createPixelBuffer(from image: UIImage) -> CVPixelBuffer? {
-        // We'll use a simpler approach that's more reliable
         guard let cgImage = image.cgImage else { return nil }
         
         let width = cgImage.width
