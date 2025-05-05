@@ -44,7 +44,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         sessionCode = defaults?.string(forKey: kCodeKey) ?? "0000"
         
         // Get the server URL
-        let serverBase = "http://172.20.10.3:8080/upload/"
+        let serverBase = "http://10.20.5.212:8080/upload/"
         uploadURL = URL(string: "\(serverBase)\(sessionCode)") ?? uploadURL
 
         // 2) Get quality level from UserDefaults or setupInfo

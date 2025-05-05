@@ -21,7 +21,7 @@ class BroadcastService {
     /// Sets the quality level for the upcoming broadcast
     private func setQualityLevel(_ quality: String) {
         // Pass quality level to broadcast extension via setup info dictionary
-        let setupInfo: [String: Any] = ["qualityLevel": quality]
+        let _: [String: Any] = ["qualityLevel": quality]
         
         // Save to UserDefaults with App Group as well for redundancy
         let groupID = "group.com.elmelz.crcoach"
