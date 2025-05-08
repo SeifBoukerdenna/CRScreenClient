@@ -25,14 +25,16 @@ struct ContentView: View {
                 if bm.isBroadcasting {
                     if isVideoPrepared {
                         PlayerView(player: player) { layer in
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                pipManager.setup(with: layer)
+                            if Constants.FeatureFlags.enablePictureInPicture {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                    pipManager.setup(with: layer)
+                                }
                             }
                         }
-                        .frame(height: 200)
-                        .cornerRadius(12)
+                        .frame(height: UIScreen.main.bounds.height * 1.5) // Changed from fixed 200 to 80% of screen height
+                        .cornerRadius(Constants.UI.cornerRadius)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12)
+                            RoundedRectangle(cornerRadius: Constants.UI.cornerRadius)
                                 .stroke(Color.crGold, lineWidth: 2)
                         )
                         .padding(.horizontal)
@@ -40,7 +42,7 @@ struct ContentView: View {
                         // Placeholder until video is prepared
                         Rectangle()
                             .fill(Color.black.opacity(0.8))
-                            .frame(height: 200)
+                            .frame(height: UIScreen.main.bounds.height * 1.5)
                             .cornerRadius(12)
                             .overlay(
                                 ProgressView()

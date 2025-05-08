@@ -39,7 +39,8 @@ struct PostBroadcastPreview: View {
             ZStack {
                 // Video player
                 VideoPlayerView(player: player)
-                    .frame(height: 300)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: UIScreen.main.bounds.height * 0.6) // Increase height percentage
                     .cornerRadius(Constants.UI.cornerRadius)
                     .overlay(
                         RoundedRectangle(cornerRadius: Constants.UI.cornerRadius)
@@ -369,7 +370,7 @@ struct VideoPlayerView: UIViewRepresentable {
         
         let playerLayer = AVPlayerLayer(player: player)
         playerLayer.frame = view.bounds
-        playerLayer.videoGravity = .resizeAspect
+        playerLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(playerLayer)
         
         // Set up observer for layout changes

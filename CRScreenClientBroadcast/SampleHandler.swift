@@ -161,39 +161,62 @@ class SampleHandler: RPBroadcastSampleHandler {
                 // Initialize asset writer
                 assetWriter = try AVAssetWriter(outputURL: url, fileType: .mp4)
                 
+                // Get the screen dimensions for proper aspect ratio
+                // Since we can't access UIScreen in extension, we'll use common device dimensions
+                // and adjust based on the incoming sample buffers
+                
+                // Default to 16:9 aspect ratio for iPhone landscape, but this will be refined
+                // when we get the first sample buffer's dimensions
+                let defaultWidth = 1920
+                let defaultHeight = 1080
+                
+                // Adjust based on quality level
+                var width: Int
+                var height: Int
+                var bitRate: Int
+                var profileLevel: String
+                
+                switch qualityLevel {
+                case "low":
+                    width = 854
+                    height = 480
+                    bitRate = 1_500_000 // 1.5 Mbps
+                    profileLevel = AVVideoProfileLevelH264BaselineAutoLevel
+                case "high":
+                    width = defaultWidth
+                    height = defaultHeight
+                    bitRate = 6_000_000 // 6 Mbps
+                    profileLevel = AVVideoProfileLevelH264HighAutoLevel
+                default: // medium
+                    width = 1280
+                    height = 720
+                    bitRate = 3_000_000 // 3 Mbps
+                    profileLevel = AVVideoProfileLevelH264MainAutoLevel
+                }
+                
                 // Configure video settings based on quality
                 var videoSettings: [String: Any] = [
                     AVVideoCodecKey: AVVideoCodecType.h264,
-                    AVVideoWidthKey: 1280,
-                    AVVideoHeightKey: 720
+                    AVVideoWidthKey: width,
+                    AVVideoHeightKey: height,
+                    AVVideoCompressionPropertiesKey: [
+                        AVVideoAverageBitRateKey: bitRate,
+                        AVVideoProfileLevelKey: profileLevel,
+                        AVVideoMaxKeyFrameIntervalKey: 60, // Keyframe every 2 seconds at 30fps
+                        AVVideoAllowFrameReorderingKey: false, // Reduce latency
+                        AVVideoExpectedSourceFrameRateKey: 30 // Expect 30fps
+                    ] as [String: Any]
                 ]
-                
-                // Adjust settings based on quality
-                switch qualityLevel {
-                case "low":
-                    videoSettings[AVVideoWidthKey] = 854
-                    videoSettings[AVVideoHeightKey] = 480
-                    videoSettings[AVVideoCompressionPropertiesKey] = [
-                        AVVideoAverageBitRateKey: 1_000_000,
-                        AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel
-                    ]
-                case "high":
-                    videoSettings[AVVideoWidthKey] = 1920
-                    videoSettings[AVVideoHeightKey] = 1080
-                    videoSettings[AVVideoCompressionPropertiesKey] = [
-                        AVVideoAverageBitRateKey: 6_000_000,
-                        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
-                    ]
-                default: // medium
-                    videoSettings[AVVideoCompressionPropertiesKey] = [
-                        AVVideoAverageBitRateKey: 3_000_000,
-                        AVVideoProfileLevelKey: AVVideoProfileLevelH264MainAutoLevel
-                    ]
-                }
                 
                 // Create video input
                 videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+                
+                // Important: this needs to be true for real-time broadcasting
                 videoInput?.expectsMediaDataInRealTime = true
+                
+                // Configure the transform to handle rotation
+                // This will be set properly when we get the first sample buffer
+                // videoInput?.transform = CGAffineTransform(rotationAngle: CGFloat.pi/2) // For portrait
                 
                 if let videoInput = videoInput, assetWriter?.canAdd(videoInput) == true {
                     assetWriter?.add(videoInput)
@@ -201,7 +224,7 @@ class SampleHandler: RPBroadcastSampleHandler {
                     hasReceivedFirstSample = false
                     hasSamplesWaitingToWrite = false
                     isFinishingRecording = false
-                    NSLog("Recording setup successfully")
+                    NSLog("Recording setup successfully with dimensions \(width)x\(height)")
                 } else {
                     NSLog("Failed to add video input to asset writer")
                     // Retry with different settings
@@ -216,6 +239,7 @@ class SampleHandler: RPBroadcastSampleHandler {
             }
         }
     }
+    
     
     private func recordSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
         guard isRecording,
@@ -372,16 +396,20 @@ class SampleHandler: RPBroadcastSampleHandler {
         default: threshold = mediumQualityThreshold
         }
         
-        // Apply resize if needed
+        // Apply resize if needed - PRESERVE ASPECT RATIO
         let img: CIImage
         if w > threshold || h > threshold {
-            let scaleFactor = CGFloat(threshold) / CGFloat(max(w, h)) * downsizeFactor
+            // Calculate scale factor while preserving aspect ratio
+            let widthScale = CGFloat(threshold) / CGFloat(w)
+            let heightScale = CGFloat(threshold) / CGFloat(h)
+            let scaleFactor = min(widthScale, heightScale) * downsizeFactor
+            
             img = ci.transformed(by: CGAffineTransform(
                 scaleX: scaleFactor,
                 y: scaleFactor
             ))
         } else if downsizeFactor < 1.0 {
-            // Apply downsizing even for smaller images in low/medium quality
+            // Apply downsizing evenly to preserve aspect ratio
             img = ci.transformed(by: CGAffineTransform(
                 scaleX: downsizeFactor,
                 y: downsizeFactor
@@ -390,6 +418,7 @@ class SampleHandler: RPBroadcastSampleHandler {
             img = ci
         }
 
+        // Ensure we're getting the entire image extent
         guard let cg = ciCtx.createCGImage(img, from: img.extent) else { return nil }
         return UIImage(cgImage: cg).jpegData(compressionQuality: compressionQuality)
     }
