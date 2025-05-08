@@ -1,3 +1,5 @@
+// CRScreenClient/Features/UI/Screens/MainScreen.swift
+
 import SwiftUI
 import AVKit
 import ReplayKit
@@ -12,6 +14,11 @@ struct MainScreen: View {
     @State private var shouldSetupVideo = false
     @State private var showQualitySettings = false
     
+    // State variables for post-broadcast preview
+    @State private var showPostBroadcastPreview = false
+    @State private var lastRecordingURL: URL?
+    @State private var isProcessingRecording = false
+    
     @Environment(\.scenePhase) private var phase
     
     var body: some View {
@@ -23,34 +30,48 @@ struct MainScreen: View {
             )
             .ignoresSafeArea()
             
-            VStack(spacing: 20) {
-                // Player View
-                if broadcastManager.isBroadcasting {
-                    videoPlayerSection
-                }
-                
-                // Status indicators
-                statusSection
-                
-                // Session Code
-                if broadcastManager.isBroadcasting {
-                    sessionCodeSection
-                    GuideCard()
+            // Show post-broadcast preview if active
+            if showPostBroadcastPreview, let recordingURL = lastRecordingURL {
+                PostBroadcastPreview(
+                    recordingURL: recordingURL,
+                    onDiscard: handleDiscardRecording,
+                    onSend: handleSendRecording
+                )
+            } else {
+                // Main broadcast UI
+                VStack(spacing: 20) {
+                    // Player View
+                    if broadcastManager.isBroadcasting {
+                        videoPlayerSection
+                    }
                     
+                    // Status indicators
+                    statusSection
+                    
+                    // Session Code
+                    if broadcastManager.isBroadcasting {
+                        sessionCodeSection
+                        GuideCard()
+                    }
+                    
+                    // Quality selector button (before broadcast)
+                    if !broadcastManager.isBroadcasting {
+                        qualityButton
+                    }
+                    
+                    // Action buttons
+                    actionButtonsSection
+                    
+                    // Processing indicator
+                    if isProcessingRecording {
+                        processingIndicator
+                    }
                 }
-                
-                // Quality selector button (before broadcast)
-                if !broadcastManager.isBroadcasting {
-                    qualityButton
+                .padding(.horizontal)
+                .sheet(isPresented: $showQualitySettings) {
+                    QualitySelector(selectedQuality: $broadcastManager.qualityLevel)
+                        .interactiveDismissDisabled()
                 }
-                
-                // Action buttons
-                actionButtonsSection
-            }
-            .padding(.horizontal)
-            .sheet(isPresented: $showQualitySettings) {
-                QualitySelector(selectedQuality: $broadcastManager.qualityLevel)
-                    .interactiveDismissDisabled()
             }
         }
         .background(
@@ -64,8 +85,8 @@ struct MainScreen: View {
         .onChange(of: phase) { _, newValue in
             handlePhaseChange(newValue)
         }
-        .onChange(of: broadcastManager.isBroadcasting) { _, isNowBroadcasting in
-            handleBroadcastStateChange(isNowBroadcasting)
+        .onChange(of: broadcastManager.isBroadcasting) { oldValue, isNowBroadcasting in
+            handleBroadcastStateChange(oldValue, isNowBroadcasting)
         }
         .onChange(of: shouldSetupVideo) { _, shouldSetup in
             handleSetupVideoChange(shouldSetup)
@@ -273,11 +294,40 @@ struct MainScreen: View {
         }
     }
     
+    private var processingIndicator: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                .scaleEffect(1.5)
+            
+            Text("Processing broadcast recording...")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 30)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.black.opacity(0.6))
+                .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 5)
+        )
+        .padding(.horizontal, 40)
+    }
+    
     // MARK: - Event Handlers
     
     private func handleAppear() {
         if broadcastManager.isBroadcasting && !isVideoPrepared {
             shouldSetupVideo = true
+        }
+        
+        // Check if there's a pending recording to show
+        if !broadcastManager.isBroadcasting && !showPostBroadcastPreview {
+            if let recordingURL = RecordingManager.shared.getLastBroadcastRecording() {
+                lastRecordingURL = recordingURL
+                showPostBroadcastPreview = true
+                Logger.info("Found pending recording on app appear", to: Logger.broadcast)
+            }
         }
     }
     
@@ -287,12 +337,34 @@ struct MainScreen: View {
         }
     }
     
-    private func handleBroadcastStateChange(_ isNowBroadcasting: Bool) {
+    private func handleBroadcastStateChange(_ wasActive: Bool, _ isNowBroadcasting: Bool) {
         if isNowBroadcasting {
             shouldSetupVideo = true
             isVideoPrepared = false
-        } else {
-            resetVideoState()
+            // Reset post-broadcast state
+            showPostBroadcastPreview = false
+            lastRecordingURL = nil
+        } else if wasActive {
+            // The broadcast just ended
+            // Check for recording and show preview
+            isProcessingRecording = true
+            
+            // Give the broadcast extension time to finish writing the recording
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                if let recordingURL = RecordingManager.shared.getLastBroadcastRecording() {
+                    lastRecordingURL = recordingURL
+                    isProcessingRecording = false
+                    showPostBroadcastPreview = true
+                    
+                    Logger.info("Found recording at: \(recordingURL.path)", to: Logger.broadcast)
+                } else {
+                    // No recording found
+                    isProcessingRecording = false
+                    Logger.error("No recording found after broadcast", to: Logger.broadcast)
+                }
+                
+                resetVideoState()
+            }
         }
     }
     
@@ -326,6 +398,37 @@ struct MainScreen: View {
         // Stop PiP if active
         if pipManager.isPiPActive {
             pipManager.stopPiP()
+        }
+    }
+    
+    private func handleDiscardRecording() {
+        if let url = lastRecordingURL {
+            RecordingManager.shared.deleteRecording(at: url)
+        }
+        
+        // Reset UI state
+        showPostBroadcastPreview = false
+        lastRecordingURL = nil
+    }
+    
+    private func handleSendRecording() {
+        guard let url = lastRecordingURL else { return }
+        
+        isProcessingRecording = true
+        showPostBroadcastPreview = false
+        
+        RecordingManager.shared.sendRecordingToServer(at: url) { success in
+            DispatchQueue.main.async {
+                isProcessingRecording = false
+                
+                if success {
+                    // Reset UI after successful send
+                    lastRecordingURL = nil
+                } else {
+                    // Could show an error message here
+                    showPostBroadcastPreview = true
+                }
+            }
         }
     }
 }

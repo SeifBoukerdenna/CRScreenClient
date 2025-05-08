@@ -22,6 +22,8 @@ enum Constants {
     
     enum Broadcast {
         static let extensionID = "com.elmelz.CRScreenClient.Broadcast"
+        static let groupID = "group.com.elmelz.crcoach"
+        static let recordingKey = "lastRecordingPath"
     }
     
     enum FeatureFlags {
