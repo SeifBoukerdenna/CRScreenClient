@@ -19,7 +19,7 @@ struct PlayerView: UIViewRepresentable {
             // Create new player layer
             let playerLayer = AVPlayerLayer(player: player)
             playerLayer.frame = uiView.bounds
-            playerLayer.videoGravity = .resizeAspect
+//            playerLayer.videoGravity = .resize
             uiView.layer.addSublayer(playerLayer)
             
             // Notify that layer was created
