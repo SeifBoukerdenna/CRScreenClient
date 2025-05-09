@@ -1,5 +1,7 @@
+// BroadcastManager.swift
 import Foundation
 import Combine
+import AVFoundation
 
 /// Manages ReplayKit broadcast state & 4‑digit code
 final class BroadcastManager: ObservableObject {
@@ -7,6 +9,7 @@ final class BroadcastManager: ObservableObject {
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var code: String = "— — — —"
     @Published var qualityLevel: StreamQuality = .medium
+    @Published private(set) var lastRecordingURL: URL?
 
     private let groupID = "group.com.elmelz.crcoach"
     private let kStartedAtKey = "broadcastStartedAt"
@@ -20,6 +23,10 @@ final class BroadcastManager: ObservableObject {
     // Use a local cache to avoid constant UserDefaults access
     private var cachedStartDate: Date?
     private var cachedCode: String?
+    private var recordingsDirectory: URL?
+    
+    // Reference to the storage manager
+    let storageManager = BroadcastStorageManager()
 
     private var startDate: Date? {
         // Force check UserDefaults every time to detect external changes
@@ -35,6 +42,22 @@ final class BroadcastManager: ObservableObject {
     }
 
     init() {
+        // Setup recordings directory
+        if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) {
+            let recordingsDir = containerURL.appendingPathComponent("Recordings", isDirectory: true)
+            
+            // Create directory if it doesn't exist
+            if !FileManager.default.fileExists(atPath: recordingsDir.path) {
+                try? FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+            }
+            
+            recordingsDirectory = recordingsDir
+            
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("Recordings directory: \(recordingsDir.path)")
+            }
+        }
+        
         // Setup initial state
         setupInitialState()
         
@@ -138,10 +161,72 @@ final class BroadcastManager: ObservableObject {
         }
     }
 
-    // Method to clear state when needed
+    // Method to reset state and find the recording
     func resetBroadcastState() {
         if Constants.FeatureFlags.enableDebugLogging {
             print("Resetting broadcast state")
+        }
+        
+        // Get duration from cached start date if available
+        var duration: TimeInterval = 0
+        if let startDate = cachedStartDate {
+            duration = Date().timeIntervalSince(startDate)
+        }
+        
+    
+        // Method to reset state and find the recording
+        func resetBroadcastState() {
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("Resetting broadcast state")
+            }
+            
+            // Get duration from cached start date if available
+            var duration: TimeInterval = 0
+            if let startDate = cachedStartDate {
+                duration = Date().timeIntervalSince(startDate)
+            }
+            
+            // Look for the most recent recording
+            findLatestRecording { [weak self] url in
+                guard let self = self else { return }
+                
+                if let url = url {
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        print("Found recording at: \(url.path)")
+                    }
+                    
+                    // Validate the recording - added self. before method call
+                    self.validateRecording(url: url) { [weak self] isValid, validDuration, trackCount in
+                        guard let self = self else { return }
+                        
+                        if isValid {
+                            if Constants.FeatureFlags.enableDebugLogging {
+                                print("Recording is valid with proper duration and tracks")
+                            }
+                            
+                            // Store in BroadcastStorageManager
+                            DispatchQueue.main.async {
+                                self.lastRecordingURL = url
+                                self.storageManager.addExistingRecording(url: url, duration: validDuration ?? duration)
+                            }
+                        } else {
+                            if Constants.FeatureFlags.enableDebugLogging {
+                                print("Recording is invalid or corrupted")
+                            }
+                        }
+                    }
+                }
+            }
+            
+            cachedStartDate = nil
+            isBroadcasting = false
+            elapsed = 0
+            
+            // Remove from UserDefaults too
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                guard let self = self else { return }
+                UserDefaults(suiteName: self.groupID)?.removeObject(forKey: self.kStartedAtKey)
+            }
         }
         
         cachedStartDate = nil
@@ -152,6 +237,103 @@ final class BroadcastManager: ObservableObject {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
             UserDefaults(suiteName: self.groupID)?.removeObject(forKey: self.kStartedAtKey)
+        }
+    }
+    
+    private func findLatestRecording(completion: @escaping (URL?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self, let recordingsDir = self.recordingsDirectory else {
+                completion(nil)
+                return
+            }
+            
+            do {
+                // Get all files in the recordings directory
+                let fileURLs = try FileManager.default.contentsOfDirectory(
+                    at: recordingsDir,
+                    includingPropertiesForKeys: [.creationDateKey],
+                    options: [.skipsHiddenFiles]
+                )
+                
+                // Filter for MP4 files
+                let mp4Files = fileURLs.filter { $0.pathExtension.lowercased() == "mp4" }
+                
+                // Sort by creation date, newest first
+                let sortedFiles = try mp4Files.sorted { (url1, url2) -> Bool in
+                    let attr1 = try url1.resourceValues(forKeys: [.creationDateKey])
+                    let attr2 = try url2.resourceValues(forKeys: [.creationDateKey])
+                    
+                    guard let date1 = attr1.creationDate, let date2 = attr2.creationDate else {
+                        return false
+                    }
+                    
+                    return date1 > date2
+                }
+                
+                // Get the most recent file
+                let mostRecentFile = sortedFiles.first
+                
+                if let file = mostRecentFile {
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        // Get file size
+                        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+                        let fileSize = attributes[.size] as? Int64 ?? 0
+                        let byteCountFormatter = ByteCountFormatter()
+                        byteCountFormatter.allowedUnits = [.useKB, .useMB, .useGB]
+                        byteCountFormatter.countStyle = .file
+                        let readableSize = byteCountFormatter.string(fromByteCount: fileSize)
+                        
+                        print("Found recording at \(file.path)")
+                        print("Recording file size: \(readableSize)")
+                    }
+                }
+                
+                DispatchQueue.main.async {
+                    completion(mostRecentFile)
+                }
+            } catch {
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Error finding recordings: \(error)")
+                }
+                DispatchQueue.main.async {
+                    completion(nil)
+                }
+            }
+        }
+    }
+    
+    private func validateRecording(url: URL, completion: @escaping (Bool, TimeInterval?, Int) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let asset = AVAsset(url: url)
+            
+            // Check duration and tracks
+            Task {
+                do {
+                    let duration = try await asset.load(.duration)
+                    let durationInSeconds = CMTimeGetSeconds(duration)
+                    
+                    let tracks = try await asset.loadTracks(withMediaType: .video)
+                    let trackCount = tracks.count
+                    
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        print("Recording details: Duration \(durationInSeconds)s, Video tracks: \(trackCount)")
+                    }
+                    
+                    // Recording is valid if it has a positive duration and at least one video track
+                    let isValid = durationInSeconds > 0 && trackCount > 0
+                    
+                    DispatchQueue.main.async {
+                        completion(isValid, durationInSeconds, trackCount)
+                    }
+                } catch {
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        print("Error validating recording: \(error)")
+                    }
+                    DispatchQueue.main.async {
+                        completion(false, nil, 0)
+                    }
+                }
+            }
         }
     }
 }
