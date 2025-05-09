@@ -1,4 +1,3 @@
-// BroadcastStorageManager.swift
 import Foundation
 import AVFoundation
 
@@ -52,6 +51,12 @@ class BroadcastStorageManager: ObservableObject {
         } catch {
             Logger.error("Failed to save broadcasts: \(error)", to: Logger.app)
         }
+    }
+    
+    // Public method to refresh broadcasts list
+    func refreshBroadcasts() {
+        loadBroadcasts()
+        scanForMissingRecordings()
     }
     
     // Scan for recordings that aren't in our list
@@ -145,6 +150,10 @@ class BroadcastStorageManager: ObservableObject {
                         }
                         
                         self.saveBroadcasts()
+                        
+                        if Constants.FeatureFlags.enableDebugLogging {
+                            print("Added new recording to broadcasts list: \(url.lastPathComponent)")
+                        }
                     }
                 }
             } catch {
@@ -156,40 +165,50 @@ class BroadcastStorageManager: ObservableObject {
     }
     
     func addExistingRecording(url: URL, duration: TimeInterval) {
-        // Check if this recording is already in our list
-        if broadcasts.contains(where: { $0.fileURL.path == url.path }) {
-            return
-        }
-        
-        // Get file attributes
-        do {
-            let resourceValues = try url.resourceValues(forKeys: [.creationDateKey])
-            let creationDate = resourceValues.creationDate ?? Date()
-            
-            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-            let fileSize = attributes[.size] as? Int64 ?? 0
-            
-            // Create record
-            let record = BroadcastRecord(
-                date: creationDate,
-                duration: duration,
-                fileURL: url,
-                fileSize: fileSize
-            )
-            
-            // Add to list and maintain sort order
-            broadcasts.append(record)
-            broadcasts.sort { $0.date > $1.date }
-            
-            // Limit to max broadcasts
-            if broadcasts.count > maxBroadcasts {
-                // We don't delete files here, just remove from the list
-                broadcasts = Array(broadcasts.prefix(maxBroadcasts))
+        // Run this on the main thread to ensure UI updates
+        DispatchQueue.main.async {
+            // Check if this recording is already in our list
+            if self.broadcasts.contains(where: { $0.fileURL.path == url.path }) {
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Recording already in list, skipping: \(url.lastPathComponent)")
+                }
+                return
             }
             
-            saveBroadcasts()
-        } catch {
-            Logger.error("Failed to add existing recording: \(error)", to: Logger.app)
+            // Get file attributes
+            do {
+                let resourceValues = try url.resourceValues(forKeys: [.creationDateKey])
+                let creationDate = resourceValues.creationDate ?? Date()
+                
+                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                let fileSize = attributes[.size] as? Int64 ?? 0
+                
+                // Create record
+                let record = BroadcastRecord(
+                    date: creationDate,
+                    duration: duration,
+                    fileURL: url,
+                    fileSize: fileSize
+                )
+                
+                // Add to list and maintain sort order
+                self.broadcasts.append(record)
+                self.broadcasts.sort { $0.date > $1.date }
+                
+                // Limit to max broadcasts
+                if self.broadcasts.count > self.maxBroadcasts {
+                    // We don't delete files here, just remove from the list
+                    self.broadcasts = Array(self.broadcasts.prefix(self.maxBroadcasts))
+                }
+                
+                self.saveBroadcasts()
+                
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Added broadcast to recent list: \(url.lastPathComponent)")
+                }
+            } catch {
+                Logger.error("Failed to add existing recording: \(error)", to: Logger.app)
+            }
         }
     }
     
@@ -198,11 +217,21 @@ class BroadcastStorageManager: ObservableObject {
             // Remove from storage if it's in the Recordings directory
             if broadcast.fileURL.path.contains("/Recordings/") {
                 try FileManager.default.removeItem(at: broadcast.fileURL)
+                
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Deleted file: \(broadcast.fileURL.lastPathComponent)")
+                }
             }
             
-            // Remove from list
-            broadcasts.removeAll { $0.id == broadcast.id }
-            saveBroadcasts()
+            // Update the list on the main thread to ensure UI updates
+            DispatchQueue.main.async {
+                self.broadcasts.removeAll { $0.id == broadcast.id }
+                self.saveBroadcasts()
+                
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Removed broadcast from list")
+                }
+            }
         } catch {
             Logger.error("Failed to delete broadcast: \(error)", to: Logger.app)
         }

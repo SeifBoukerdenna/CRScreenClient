@@ -1,4 +1,3 @@
-// BroadcastManager.swift
 import Foundation
 import Combine
 import AVFoundation
@@ -173,59 +172,35 @@ final class BroadcastManager: ObservableObject {
             duration = Date().timeIntervalSince(startDate)
         }
         
-    
-        // Method to reset state and find the recording
-        func resetBroadcastState() {
-            if Constants.FeatureFlags.enableDebugLogging {
-                print("Resetting broadcast state")
-            }
+        // Look for the most recent recording
+        findLatestRecording { [weak self] url in
+            guard let self = self else { return }
             
-            // Get duration from cached start date if available
-            var duration: TimeInterval = 0
-            if let startDate = cachedStartDate {
-                duration = Date().timeIntervalSince(startDate)
-            }
-            
-            // Look for the most recent recording
-            findLatestRecording { [weak self] url in
-                guard let self = self else { return }
+            if let url = url {
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Found recording at: \(url.path)")
+                }
                 
-                if let url = url {
-                    if Constants.FeatureFlags.enableDebugLogging {
-                        print("Found recording at: \(url.path)")
-                    }
+                // Validate the recording - FIXED: added self before method call
+                self.validateRecording(url: url) { [weak self] isValid, validDuration, trackCount in
+                    guard let self = self else { return }
                     
-                    // Validate the recording - added self. before method call
-                    self.validateRecording(url: url) { [weak self] isValid, validDuration, trackCount in
-                        guard let self = self else { return }
+                    if isValid {
+                        if Constants.FeatureFlags.enableDebugLogging {
+                            print("Recording is valid with proper duration and tracks")
+                        }
                         
-                        if isValid {
-                            if Constants.FeatureFlags.enableDebugLogging {
-                                print("Recording is valid with proper duration and tracks")
-                            }
-                            
-                            // Store in BroadcastStorageManager
-                            DispatchQueue.main.async {
-                                self.lastRecordingURL = url
-                                self.storageManager.addExistingRecording(url: url, duration: validDuration ?? duration)
-                            }
-                        } else {
-                            if Constants.FeatureFlags.enableDebugLogging {
-                                print("Recording is invalid or corrupted")
-                            }
+                        // Store in BroadcastStorageManager
+                        DispatchQueue.main.async {
+                            self.lastRecordingURL = url
+                            self.storageManager.addExistingRecording(url: url, duration: validDuration ?? duration)
+                        }
+                    } else {
+                        if Constants.FeatureFlags.enableDebugLogging {
+                            print("Recording is invalid or corrupted")
                         }
                     }
                 }
-            }
-            
-            cachedStartDate = nil
-            isBroadcasting = false
-            elapsed = 0
-            
-            // Remove from UserDefaults too
-            DispatchQueue.global(qos: .utility).async { [weak self] in
-                guard let self = self else { return }
-                UserDefaults(suiteName: self.groupID)?.removeObject(forKey: self.kStartedAtKey)
             }
         }
         

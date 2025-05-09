@@ -1,4 +1,3 @@
-// MainScreen.swift
 import SwiftUI
 import AVKit
 import ReplayKit
@@ -13,6 +12,7 @@ struct MainScreen: View {
     @State private var shouldSetupVideo = false
     @State private var showQualitySettings = false
     @State private var showRecentBroadcasts = false
+    @State private var showBroadcastSavedToast = false
     
     @Environment(\.scenePhase) private var phase
     
@@ -56,6 +56,34 @@ struct MainScreen: View {
             .fullScreenCover(isPresented: $showRecentBroadcasts) {
                 RecentBroadcastsScreen(storageManager: broadcastManager.storageManager)
             }
+            
+            // Toast notification for saved broadcast
+            if showBroadcastSavedToast {
+                VStack {
+                    Spacer()
+                    
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        
+                        Text("Broadcast saved")
+                            .foregroundColor(.white)
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(
+                        Capsule()
+                            .fill(Color.black.opacity(0.8))
+                            .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    
+                    .padding(.bottom, 20)
+                }
+                .zIndex(100)
+                .transition(.opacity)
+            }
         }
         .background(
             BroadcastPickerHelper(
@@ -77,9 +105,21 @@ struct MainScreen: View {
         // Add a listener for the last recording URL
         .onChange(of: broadcastManager.lastRecordingURL) { _, url in
             if let url = url {
-                // Show a notification or toast that a recording was saved
+                // Show a toast notification that a recording was saved
                 if Constants.FeatureFlags.enableDebugLogging {
                     print("New recording available: \(url.lastPathComponent)")
+                }
+                
+                // Show toast notification
+                withAnimation {
+                    showBroadcastSavedToast = true
+                }
+                
+                // Hide toast after 3 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    withAnimation {
+                        showBroadcastSavedToast = false
+                    }
                 }
             }
         }
@@ -261,6 +301,8 @@ struct MainScreen: View {
             // Recent Broadcasts button (only show when not broadcasting)
             if !broadcastManager.isBroadcasting {
                 Button(action: {
+                    // Force storage manager to refresh before showing screen
+                    broadcastManager.storageManager.refreshBroadcasts()
                     showRecentBroadcasts = true
                 }) {
                     HStack(spacing: 10) {

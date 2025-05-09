@@ -1,13 +1,13 @@
-// RecentBroadcastsScreen.swift
 import SwiftUI
 import AVKit
 
 struct RecentBroadcastsScreen: View {
-    // Accept storage manager from parent
-    let storageManager: BroadcastStorageManager
+    // Use ObservedObject to make it reactive
+    @ObservedObject var storageManager: BroadcastStorageManager
     
     @State private var selectedBroadcast: BroadcastRecord?
     @State private var isUploading = false
+    @State private var isRefreshing = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -36,11 +36,42 @@ struct RecentBroadcastsScreen: View {
                         }
                         .foregroundColor(.white)
                     }
+                    
+                    // Add a refresh button
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            refreshBroadcasts()
+                        }) {
+                            if isRefreshing {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .foregroundColor(.white)
+                            }
+                        }
+                    }
                 }
                 .fullScreenCover(item: $selectedBroadcast) { broadcast in
                     BroadcastPlayerScreen(broadcast: broadcast)
                 }
             }
+            .onAppear {
+                // Refresh broadcasts when the view appears
+                refreshBroadcasts()
+            }
+        }
+    }
+    
+    private func refreshBroadcasts() {
+        isRefreshing = true
+        // Refresh the broadcasts list
+        storageManager.refreshBroadcasts()
+        
+        // Simulate a brief loading time for better UX
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            isRefreshing = false
         }
     }
     
