@@ -4,9 +4,14 @@ import AVFoundation
 class BroadcastStorageManager: ObservableObject {
     @Published private(set) var broadcasts: [BroadcastRecord] = []
     
-    private let maxBroadcasts = 10
     private let storageKey = "recentBroadcasts"
     private let groupID = "group.com.elmelz.crcoach"
+    
+    // Get maxBroadcasts from UserDefaults
+    private var maxBroadcasts: Int {
+        let savedMax = UserDefaults.standard.integer(forKey: "maxBroadcasts")
+        return savedMax > 0 ? savedMax : 10 // Default to 10 if not set
+    }
     
     // Set to track files we've already processed to prevent duplicates
     private var processedFilePaths = Set<String>()
@@ -60,6 +65,14 @@ class BroadcastStorageManager: ObservableObject {
             // Sort by date, newest first
             decodedBroadcasts.sort { $0.date > $1.date }
             
+            // Apply max broadcasts limit - keep only the newest recordings
+            if decodedBroadcasts.count > maxBroadcasts {
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Limiting broadcasts to maximum of \(maxBroadcasts)")
+                }
+                decodedBroadcasts = Array(decodedBroadcasts.prefix(maxBroadcasts))
+            }
+            
             // Apply the deduplicated, filtered list
             broadcasts = decodedBroadcasts
             
@@ -73,6 +86,32 @@ class BroadcastStorageManager: ObservableObject {
     }
     
     private func saveBroadcasts() {
+        // If we exceed the limit, trim the oldest recordings
+        if broadcasts.count > maxBroadcasts {
+            let toRemove = broadcasts.count - maxBroadcasts
+            let oldestBroadcasts = broadcasts.suffix(toRemove)
+            
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("Removing \(toRemove) oldest broadcasts to stay within limit of \(maxBroadcasts)")
+            }
+            
+            // Delete the recordings
+            for broadcast in oldestBroadcasts {
+                // Remove from storage
+                do {
+                    try FileManager.default.removeItem(at: broadcast.fileURL)
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        print("Deleted old broadcast file: \(broadcast.fileURL.lastPathComponent)")
+                    }
+                } catch {
+                    Logger.error("Failed to delete broadcast file: \(error)", to: Logger.app)
+                }
+            }
+            
+            // Update the broadcasts array
+            broadcasts = Array(broadcasts.prefix(maxBroadcasts))
+        }
+        
         do {
             let data = try JSONEncoder().encode(broadcasts)
             UserDefaults.standard.set(data, forKey: storageKey)
@@ -225,7 +264,22 @@ class BroadcastStorageManager: ObservableObject {
                         
                         // Limit to max broadcasts
                         if self.broadcasts.count > self.maxBroadcasts {
-                            // We don't delete files here, just remove from the list
+                            // Get the broadcasts to remove
+                            let toRemove = self.broadcasts.suffix(self.broadcasts.count - self.maxBroadcasts)
+                            
+                            // Delete the files before removing from the list
+                            for broadcast in toRemove {
+                                do {
+                                    try FileManager.default.removeItem(at: broadcast.fileURL)
+                                    if Constants.FeatureFlags.enableDebugLogging {
+                                        print("Deleted old broadcast file: \(broadcast.fileURL.lastPathComponent)")
+                                    }
+                                } catch {
+                                    Logger.error("Failed to delete broadcast file: \(error)", to: Logger.app)
+                                }
+                            }
+                            
+                            // Trim the list
                             self.broadcasts = Array(self.broadcasts.prefix(self.maxBroadcasts))
                         }
                         
@@ -328,9 +382,24 @@ class BroadcastStorageManager: ObservableObject {
                         self.broadcasts.append(record)
                         self.broadcasts.sort { $0.date > $1.date }
                         
-                        // Limit to max broadcasts
+                        // Limit to max broadcasts and handle old recordings
                         if self.broadcasts.count > self.maxBroadcasts {
-                            // We don't delete files here, just remove from the list
+                            // Get the broadcasts to remove
+                            let toRemove = self.broadcasts.suffix(self.broadcasts.count - self.maxBroadcasts)
+                            
+                            // Delete the files before removing from the list
+                            for broadcast in toRemove {
+                                do {
+                                    try FileManager.default.removeItem(at: broadcast.fileURL)
+                                    if Constants.FeatureFlags.enableDebugLogging {
+                                        print("Deleted old broadcast file: \(broadcast.fileURL.lastPathComponent)")
+                                    }
+                                } catch {
+                                    Logger.error("Failed to delete broadcast file: \(error)", to: Logger.app)
+                                }
+                            }
+                            
+                            // Trim the list
                             self.broadcasts = Array(self.broadcasts.prefix(self.maxBroadcasts))
                         }
                         
@@ -370,6 +439,18 @@ class BroadcastStorageManager: ObservableObject {
                             self.broadcasts.sort { $0.date > $1.date }
                             
                             if self.broadcasts.count > self.maxBroadcasts {
+                                // Get broadcasts to remove
+                                let toRemove = self.broadcasts.suffix(self.broadcasts.count - self.maxBroadcasts)
+                                
+                                // Delete files
+                                for broadcast in toRemove {
+                                    do {
+                                        try FileManager.default.removeItem(at: broadcast.fileURL)
+                                    } catch {
+                                        Logger.error("Failed to delete old broadcast: \(error)", to: Logger.app)
+                                    }
+                                }
+                                
                                 self.broadcasts = Array(self.broadcasts.prefix(self.maxBroadcasts))
                             }
                             

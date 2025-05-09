@@ -12,7 +12,15 @@ struct MainScreen: View {
     @State private var shouldSetupVideo = false
     @State private var showQualitySettings = false
     @State private var showRecentBroadcasts = false
+    @State private var showSettings = false
     @State private var showBroadcastSavedToast = false
+    
+    // Get app version and build number from Info.plist
+     private var appVersion: String {
+         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1"
+         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+         return "v\(version) (\(build))"
+     }
     
     @Environment(\.scenePhase) private var phase
     
@@ -26,9 +34,52 @@ struct MainScreen: View {
             .ignoresSafeArea()
             
             VStack(spacing: 20) {
+                // Top bar with settings button
+                HStack {
+                    Spacer()
+                    
+                    // Settings button in Clash Royale style
+                    Button(action: {
+                        showSettings = true
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 20))
+                            Text("Settings")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 20)
+                        .background(
+                            Capsule()
+                                .fill(Color.crNavy.opacity(0.8))
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(
+                                            LinearGradient(
+                                                colors: [.crGold, .crGold.opacity(0.7)],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ),
+                                            lineWidth: 2
+                                        )
+                                )
+                                .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 3)
+                        )
+                    }
+                    .buttonStyle(ClashRoyaleButtonStyle())
+                    
+                    Spacer()
+                }
+                .padding(.top, 8)
+                
                 // Player View
                 if broadcastManager.isBroadcasting {
                     videoPlayerSection
+                } else {
+                    // When not broadcasting, add some space
+                    Spacer().frame(height: 20)
                 }
                 
                 // Status indicators
@@ -47,11 +98,22 @@ struct MainScreen: View {
                 
                 // Action buttons
                 actionButtonsSection
+                
+                // Version number at bottom
+                Text(appVersion)
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.bottom, 8)
             }
             .padding(.horizontal)
             .sheet(isPresented: $showQualitySettings) {
                 QualitySelector(selectedQuality: $broadcastManager.qualityLevel)
                     .interactiveDismissDisabled()
+            }
+            .sheet(isPresented: $showSettings) {
+                NavigationView {
+                    SettingsScreen(storageManager: broadcastManager.storageManager, appVersion: appVersion)
+                }
             }
             .fullScreenCover(isPresented: $showRecentBroadcasts) {
                 RecentBroadcastsScreen(storageManager: broadcastManager.storageManager)
@@ -283,7 +345,14 @@ struct MainScreen: View {
                     .fill(Color.crNavy.opacity(0.7))
                     .overlay(
                         Capsule()
-                            .strokeBorder(broadcastManager.qualityLevel.color.opacity(0.5), lineWidth: 1)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [broadcastManager.qualityLevel.color, broadcastManager.qualityLevel.color.opacity(0.7)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 2
+                            )
                     )
                     .shadow(color: .black.opacity(0.4), radius: 3, x: 0, y: 2)
             )
@@ -315,7 +384,7 @@ struct MainScreen: View {
             }
             .buttonStyle(.plain)
             
-            // Recent Broadcasts button (only show when not broadcasting)
+            // Recent Broadcasts button
             if !broadcastManager.isBroadcasting {
                 Button(action: {
                     // Force storage manager to refresh before showing screen
@@ -329,12 +398,23 @@ struct MainScreen: View {
                             .font(.system(size: 18, weight: .semibold))
                     }
                     .foregroundColor(.white)
-                    .padding(.horizontal, 30)
                     .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
                     .background(
                         Capsule()
                             .fill(Color.crPurple)
-                            .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [.crPurpleLight, .crPurple.opacity(0.7)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 2
+                                    )
+                            )
+                            .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 3)
                     )
                 }
                 .buttonStyle(ClashRoyaleButtonStyle())
