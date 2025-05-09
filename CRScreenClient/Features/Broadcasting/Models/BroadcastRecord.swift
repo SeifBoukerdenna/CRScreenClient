@@ -41,5 +41,3 @@ struct BroadcastRecord: Identifiable, Codable {
         }
     }
 }
-
-

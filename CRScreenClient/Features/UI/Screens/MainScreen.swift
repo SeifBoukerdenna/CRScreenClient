@@ -383,11 +383,23 @@ struct MainScreen: View {
     }
     
     private func handleBroadcastStateChange(_ isNowBroadcasting: Bool) {
+        if Constants.FeatureFlags.enableDebugLogging {
+            print("Broadcast state changed: \(isNowBroadcasting ? "started" : "stopped")")
+        }
+        
         if isNowBroadcasting {
             shouldSetupVideo = true
             isVideoPrepared = false
         } else {
             resetVideoState()
+            
+            // When broadcasting stops, force refresh the broadcasts list after a delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Force refreshing broadcasts list after broadcast ended")
+                }
+                broadcastManager.storageManager.refreshBroadcasts()
+            }
         }
     }
     

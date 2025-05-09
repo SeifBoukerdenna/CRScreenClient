@@ -8,8 +8,15 @@ class BroadcastStorageManager: ObservableObject {
     private let storageKey = "recentBroadcasts"
     private let groupID = "group.com.elmelz.crcoach"
     
+    // Set to track files we've already processed to prevent duplicates
+    private var processedFilePaths = Set<String>()
+    
     init() {
         loadBroadcasts()
+        
+        // After loading, populate the processed files set
+        processedFilePaths = Set(broadcasts.map { $0.fileURL.path })
+        
         scanForMissingRecordings()
     }
     
@@ -17,15 +24,29 @@ class BroadcastStorageManager: ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: storageKey) else { return }
         
         do {
-            let decodedBroadcasts = try JSONDecoder().decode([BroadcastRecord].self, from: data)
+            var decodedBroadcasts = try JSONDecoder().decode([BroadcastRecord].self, from: data)
             
             // Filter out broadcasts whose files don't exist anymore
-            broadcasts = decodedBroadcasts.filter { record in
+            decodedBroadcasts = decodedBroadcasts.filter { record in
                 FileManager.default.fileExists(atPath: record.fileURL.path)
             }
             
+            // Deduplicate based on file path - this is crucial!
+            var uniquePathsSet = Set<String>()
+            decodedBroadcasts = decodedBroadcasts.filter { record in
+                let path = record.fileURL.path
+                if uniquePathsSet.contains(path) {
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        print("Removing duplicate entry for: \(record.fileURL.lastPathComponent)")
+                    }
+                    return false
+                }
+                uniquePathsSet.insert(path)
+                return true
+            }
+            
             // Update file sizes
-            broadcasts = broadcasts.map { record in
+            decodedBroadcasts = decodedBroadcasts.map { record in
                 var updatedRecord = record
                 do {
                     let attributes = try FileManager.default.attributesOfItem(atPath: record.fileURL.path)
@@ -37,7 +58,14 @@ class BroadcastStorageManager: ObservableObject {
             }
             
             // Sort by date, newest first
-            broadcasts.sort { $0.date > $1.date }
+            decodedBroadcasts.sort { $0.date > $1.date }
+            
+            // Apply the deduplicated, filtered list
+            broadcasts = decodedBroadcasts
+            
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("Loaded \(broadcasts.count) broadcasts from storage")
+            }
             
         } catch {
             Logger.error("Failed to load broadcasts: \(error)", to: Logger.app)
@@ -48,6 +76,13 @@ class BroadcastStorageManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(broadcasts)
             UserDefaults.standard.set(data, forKey: storageKey)
+            
+            // Update processed files set
+            processedFilePaths = Set(broadcasts.map { $0.fileURL.path })
+            
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("Saved \(broadcasts.count) broadcasts to storage")
+            }
         } catch {
             Logger.error("Failed to save broadcasts: \(error)", to: Logger.app)
         }
@@ -85,11 +120,12 @@ class BroadcastStorageManager: ObservableObject {
                 
                 let mp4Files = fileURLs.filter { $0.pathExtension.lowercased() == "mp4" }
                 
-                // Get list of files already in our broadcasts
-                let existingFiles = Set(self.broadcasts.map { $0.fileURL.path })
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Found \(mp4Files.count) mp4 files in recordings directory")
+                }
                 
-                // Filter for files not already in our list
-                let newFiles = mp4Files.filter { !existingFiles.contains($0.path) }
+                // Filter for files not already in our tracking set
+                let newFiles = mp4Files.filter { !self.processedFilePaths.contains($0.path) }
                 
                 if !newFiles.isEmpty {
                     if Constants.FeatureFlags.enableDebugLogging {
@@ -98,6 +134,10 @@ class BroadcastStorageManager: ObservableObject {
                     
                     // Process each new file
                     for fileURL in newFiles {
+                        // Add to processed files immediately to prevent duplicate processing
+                        DispatchQueue.main.async {
+                            self.processedFilePaths.insert(fileURL.path)
+                        }
                         self.processNewRecording(url: fileURL)
                     }
                 }
@@ -128,18 +168,35 @@ class BroadcastStorageManager: ObservableObject {
                 
                 // Get video dimensions
                 let tracks = try await asset.loadTracks(withMediaType: .video)
+                
+                // Use local variables for dimensions to avoid concurrency issues
                 let trackDimensions: CGSize = if let videoTrack = tracks.first {
                     try await videoTrack.load(.naturalSize)
                 } else {
                     CGSize.zero
                 }
                 
-                // Create local copies of width and height to avoid concurrency issues
                 let videoWidth = Int(trackDimensions.width)
                 let videoHeight = Int(trackDimensions.height)
                 
                 if Constants.FeatureFlags.enableDebugLogging && trackDimensions != .zero {
                     print("Video dimensions: \(videoWidth)x\(videoHeight)")
+                }
+                
+                // Check again if path has been processed already (could have happened in another concurrent task)
+                let filePath = url.path
+                
+                // Instead of using a local variable that we modify, directly return if already processed
+                let isAlreadyInList = await MainActor.run { () -> Bool in
+                    let alreadyProcessed = self.broadcasts.contains { $0.fileURL.path == filePath }
+                    if alreadyProcessed && Constants.FeatureFlags.enableDebugLogging {
+                        print("Skipping already processed file: \(url.lastPathComponent)")
+                    }
+                    return alreadyProcessed
+                }
+                
+                if isAlreadyInList {
+                    return
                 }
                 
                 // Recording is valid if it has a positive duration
@@ -156,6 +213,11 @@ class BroadcastStorageManager: ObservableObject {
                             width: videoWidth,
                             height: videoHeight
                         )
+                        
+                        // Check one more time for duplicates
+                        guard !self.broadcasts.contains(where: { $0.fileURL.path == url.path }) else {
+                            return
+                        }
                         
                         // Add to list and maintain sort order
                         self.broadcasts.append(record)
@@ -185,12 +247,27 @@ class BroadcastStorageManager: ObservableObject {
     func addExistingRecording(url: URL, duration: TimeInterval) {
         // Run this on the main thread to ensure UI updates
         DispatchQueue.main.async {
-            // Check if this recording is already in our list
-            if self.broadcasts.contains(where: { $0.fileURL.path == url.path }) {
+            // Skip if already in processed files
+            guard !self.processedFilePaths.contains(url.path) else {
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Skipping already processed file: \(url.lastPathComponent)")
+                }
+                return
+            }
+            
+            // Add to processed files set immediately to prevent duplicates
+            self.processedFilePaths.insert(url.path)
+            
+            // Skip if already in broadcasts list
+            guard !self.broadcasts.contains(where: { $0.fileURL.path == url.path }) else {
                 if Constants.FeatureFlags.enableDebugLogging {
                     print("Recording already in list, skipping: \(url.lastPathComponent)")
                 }
                 return
+            }
+            
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("Added recording to storage: \(url.lastPathComponent)")
             }
             
             // Process the recording asynchronously
@@ -206,28 +283,41 @@ class BroadcastStorageManager: ObservableObject {
                     // Get video dimensions
                     let asset = AVURLAsset(url: url)
                     let tracks = try await asset.loadTracks(withMediaType: .video)
+                    
+                    // Use local variables for dimensions to avoid concurrency issues
                     let trackDimensions: CGSize = if let videoTrack = tracks.first {
                         try await videoTrack.load(.naturalSize)
                     } else {
                         CGSize.zero
                     }
                     
-                    // Create local copies to avoid concurrency issues
                     let videoWidth = Int(trackDimensions.width)
                     let videoHeight = Int(trackDimensions.height)
                     
-                    if Constants.FeatureFlags.enableDebugLogging && trackDimensions != .zero {
-                        print("Video dimensions: \(videoWidth)x\(videoHeight)")
+                    // Verify duration if not provided
+                    var finalDuration = duration
+                    if finalDuration <= 0 {
+                        let assetDuration = try await asset.load(.duration)
+                        finalDuration = assetDuration.seconds
+                    }
+                    
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        print("Video info - Dimensions: \(videoWidth)x\(videoHeight), Duration: \(finalDuration)s, Size: \(fileSize) bytes")
                     }
                     
                     // Create record with all info
                     await MainActor.run { [weak self] in
                         guard let self = self else { return }
                         
+                        // Check one more time to prevent duplicates
+                        guard !self.broadcasts.contains(where: { $0.fileURL.path == url.path }) else {
+                            return
+                        }
+                        
                         // Create record
                         let record = BroadcastRecord(
                             date: creationDate,
-                            duration: duration,
+                            duration: finalDuration,
                             fileURL: url,
                             fileSize: fileSize,
                             width: videoWidth,
@@ -258,6 +348,11 @@ class BroadcastStorageManager: ObservableObject {
                         guard let self = self else { return }
                         
                         do {
+                            // Check for duplicates one more time
+                            guard !self.broadcasts.contains(where: { $0.fileURL.path == url.path }) else {
+                                return
+                            }
+                            
                             let resourceValues = try url.resourceValues(forKeys: [.creationDateKey])
                             let creationDate = resourceValues.creationDate ?? Date()
                             
@@ -266,7 +361,7 @@ class BroadcastStorageManager: ObservableObject {
                             
                             let record = BroadcastRecord(
                                 date: creationDate,
-                                duration: duration,
+                                duration: duration > 0 ? duration : 0,
                                 fileURL: url,
                                 fileSize: fileSize
                             )
@@ -279,6 +374,10 @@ class BroadcastStorageManager: ObservableObject {
                             }
                             
                             self.saveBroadcasts()
+                            
+                            if Constants.FeatureFlags.enableDebugLogging {
+                                print("Added basic broadcast record (without dimensions) to list: \(url.lastPathComponent)")
+                            }
                         } catch {
                             Logger.error("Failed to create basic record: \(error)", to: Logger.app)
                         }
@@ -289,27 +388,34 @@ class BroadcastStorageManager: ObservableObject {
     }
     
     func deleteBroadcast(_ broadcast: BroadcastRecord) {
+        // First remove from list regardless of whether the file deletion succeeds
+        DispatchQueue.main.async {
+            // Remove all instances with this file path
+            self.broadcasts.removeAll { $0.fileURL.path == broadcast.fileURL.path }
+            self.saveBroadcasts() // This updates processedFilePaths as well
+            
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("Removed broadcast(s) with path: \(broadcast.fileURL.path)")
+            }
+        }
+        
+        // Then try to delete the file
         do {
-            // Remove from storage if it's in the Recordings directory
-            if broadcast.fileURL.path.contains("/Recordings/") {
+            // Check if file exists before trying to remove
+            if FileManager.default.fileExists(atPath: broadcast.fileURL.path) {
                 try FileManager.default.removeItem(at: broadcast.fileURL)
                 
                 if Constants.FeatureFlags.enableDebugLogging {
                     print("Deleted file: \(broadcast.fileURL.lastPathComponent)")
                 }
-            }
-            
-            // Update the list on the main thread to ensure UI updates
-            DispatchQueue.main.async {
-                self.broadcasts.removeAll { $0.id == broadcast.id }
-                self.saveBroadcasts()
-                
+            } else {
                 if Constants.FeatureFlags.enableDebugLogging {
-                    print("Removed broadcast from list")
+                    print("File already deleted: \(broadcast.fileURL.lastPathComponent)")
                 }
             }
         } catch {
-            Logger.error("Failed to delete broadcast: \(error)", to: Logger.app)
+            Logger.error("Failed to delete broadcast file: \(error)", to: Logger.app)
+            // We already removed from list, so no need for further action
         }
     }
     
@@ -318,8 +424,35 @@ class BroadcastStorageManager: ObservableObject {
         // For now, just simulate success after a delay
         DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
             DispatchQueue.main.async {
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Simulated sending recording to server: \(broadcast.fileURL.lastPathComponent)")
+                }
                 completion(true)
             }
         }
+    }
+    
+    // Helper method to extract timestamp from filename
+    private func getTimestampFromFilename(_ filename: String) -> Date? {
+        // Handle format like broadcast_20230516_123045.mp4 or broadcast_1746767572.406355.mp4
+        
+        // First try the YYYYMMDD_HHMMSS format
+        if let dateString = filename.split(separator: "_").dropFirst().first,
+           let timeString = filename.split(separator: "_").dropFirst().dropFirst().first?.split(separator: ".").first {
+            let fullString = "\(dateString)_\(timeString)"
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
+            if let date = dateFormatter.date(from: String(fullString)) {
+                return date
+            }
+        }
+        
+        // Try the timestamp format
+        if let timestampString = filename.split(separator: "_").dropFirst().first?.split(separator: ".").first,
+           let timestamp = Double(timestampString) {
+            return Date(timeIntervalSince1970: timestamp)
+        }
+        
+        return nil
     }
 }

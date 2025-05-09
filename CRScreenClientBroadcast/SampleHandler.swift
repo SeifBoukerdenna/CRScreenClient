@@ -287,7 +287,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         
         // Get presentation time
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        let relativeTime = CMTimeSubtract(presentationTime, recordingStartTime)
+        _ = CMTimeSubtract(presentationTime, recordingStartTime)
         
         // Directly append sample buffer to the video input
         videoInput.append(sampleBuffer)

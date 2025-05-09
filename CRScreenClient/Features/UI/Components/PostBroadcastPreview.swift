@@ -175,7 +175,12 @@ struct PostBroadcastPreview: View {
 
                 // Aspect-ratio
                 if let track = try await asset.loadTracks(withMediaType: .video).first {
-                    let size = track.naturalSize.applying(track.preferredTransform)
+                    // Use the modern load methods instead of deprecated properties
+                    let naturalSize = try await track.load(.naturalSize)
+                    let preferredTransform = try await track.load(.preferredTransform)
+                    
+                    // Apply the transform to the size
+                    let size = naturalSize.applying(preferredTransform)
                     let w = abs(size.width), h = abs(size.height)
                     if w > 0 && h > 0 { videoAR = w / h }
                 }
