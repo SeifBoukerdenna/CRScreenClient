@@ -1,5 +1,3 @@
-// CRScreenClientBroadcast/SampleHandler.swift
-
 import ReplayKit
 import UIKit
 import CoreImage
@@ -39,18 +37,14 @@ class SampleHandler: RPBroadcastSampleHandler {
     private let kQualityKey = "streamQuality"
     private var sessionCode = "0000"
     private var qualityLevel = "medium" // Default quality level
+    private var threshold: Int = 1280 // Will be set based on quality
     
-    // Recording Assets
+    // Local recording
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
+    private var pixelBufferAdapter: AVAssetWriterInputPixelBufferAdaptor?
+    private var recordingStartTime: CMTime?
     private var recordingURL: URL?
-    private var isRecording = false
-    private var firstSampleTime: CMTime?
-    private var hasReceivedFirstSample = false
-    
-    // For tracking writing status
-    private var isFinishingRecording = false
-    private var hasSamplesWaitingToWrite = false
 
     // MARK: – Lifecycle
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
@@ -72,12 +66,15 @@ class SampleHandler: RPBroadcastSampleHandler {
         // Apply quality settings
         applyQualitySettings(qualityLevel)
         
-        // Setup for recording
-        setupRecordingWithRetry()
+        // Set up local recording
+        setupLocalRecording()
         
         defaults?.set(Date(), forKey: kStartedAtKey)
         NSLog("Broadcast started (code \(sessionCode), quality \(qualityLevel))")
         NSLog("Upload URL: \(uploadURL.absoluteString)")
+        if let recordingURL = recordingURL {
+            NSLog("Recording locally to: %@", recordingURL.path)
+        }
     }
 
     override func processSampleBuffer(_ sb: CMSampleBuffer,
@@ -85,6 +82,11 @@ class SampleHandler: RPBroadcastSampleHandler {
         guard t == .video else { return }
 
         frameCount += 1
+        
+        // Process for local recording regardless of frame skip
+        processForLocalRecording(sb)
+        
+        // Skip frames for server upload based on quality settings
         if frameCount % (frameSkip + 1) != 0 { return }
 
         processed += 1
@@ -97,11 +99,9 @@ class SampleHandler: RPBroadcastSampleHandler {
             processed = 0; lastLog = now
         }
 
-        // Record video sample
-        recordSampleBuffer(sb)
-
-        // Continue with the existing streaming logic
-        guard let jpeg = jpegData(from: sb) else { return }
+        // Use preserve dimensions for high quality recording
+        let preserveOriginalDimensions = (qualityLevel == "high")
+        guard let jpeg = jpegData(from: sb, preserveOriginalDimensions: preserveOriginalDimensions) else { return }
 
         var req = URLRequest(url: uploadURL)
         req.httpMethod = "POST"
@@ -115,249 +115,30 @@ class SampleHandler: RPBroadcastSampleHandler {
     override func broadcastFinished() {
         NSLog("Broadcast finished")
         
-        // Finish recording
-        finishRecording()
+        // Finalize local recording
+        finalizeRecording { success in
+            if success {
+                NSLog("Successfully finalized local recording")
+            } else {
+                NSLog("Failed to finalize local recording")
+            }
+            
+            // Log the recordings directory path
+            if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: self.groupID) {
+                let recordingsDir = containerURL.appendingPathComponent("Recordings", isDirectory: true)
+                NSLog("Recordings directory: %@", recordingsDir.path)
+                
+                // List all files in the recordings directory
+                do {
+                    let files = try FileManager.default.contentsOfDirectory(atPath: recordingsDir.path)
+                    NSLog("Files in recordings directory: %@", files.joined(separator: ", "))
+                } catch {
+                    NSLog("Failed to list recordings directory: %@", error.localizedDescription)
+                }
+            }
+        }
         
-        // Remove broadcast start time
         UserDefaults(suiteName: groupID)?.removeObject(forKey: kStartedAtKey)
-    }
-    
-    // MARK: - Recording Methods
-    
-    private func setupRecordingWithRetry(retryCount: Int = 0) {
-        // Max retries to prevent infinite loops
-        if retryCount > 3 {
-            NSLog("Failed to set up recording after multiple attempts")
-            return
-        }
-        
-        do {
-            let fileManager = FileManager.default
-            guard let containerURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: groupID) else {
-                NSLog("Failed to get container URL")
-                return
-            }
-            
-            let recordingsDir = containerURL.appendingPathComponent("Recordings", isDirectory: true)
-            
-            // Create directory if it doesn't exist
-            if !fileManager.fileExists(atPath: recordingsDir.path) {
-                try fileManager.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
-            }
-            
-            // Create unique file name based on timestamp
-            let timestamp = Date().timeIntervalSince1970
-            let fileName = "broadcast_\(timestamp).mp4"
-            recordingURL = recordingsDir.appendingPathComponent(fileName)
-            
-            NSLog("Setting up recording to: \(recordingURL?.path ?? "unknown")")
-            
-            if let url = recordingURL {
-                // Remove any existing file
-                if fileManager.fileExists(atPath: url.path) {
-                    try fileManager.removeItem(at: url)
-                }
-                
-                // Initialize asset writer
-                assetWriter = try AVAssetWriter(outputURL: url, fileType: .mp4)
-                
-                // Get the screen dimensions for proper aspect ratio
-                // Since we can't access UIScreen in extension, we'll use common device dimensions
-                // and adjust based on the incoming sample buffers
-                
-                // Default to 16:9 aspect ratio for iPhone landscape, but this will be refined
-                // when we get the first sample buffer's dimensions
-                let defaultWidth = 1920
-                let defaultHeight = 1080
-                
-                // Adjust based on quality level
-                var width: Int
-                var height: Int
-                var bitRate: Int
-                var profileLevel: String
-                
-                switch qualityLevel {
-                case "low":
-                    width = 854
-                    height = 480
-                    bitRate = 1_500_000 // 1.5 Mbps
-                    profileLevel = AVVideoProfileLevelH264BaselineAutoLevel
-                case "high":
-                    width = defaultWidth
-                    height = defaultHeight
-                    bitRate = 6_000_000 // 6 Mbps
-                    profileLevel = AVVideoProfileLevelH264HighAutoLevel
-                default: // medium
-                    width = 1280
-                    height = 720
-                    bitRate = 3_000_000 // 3 Mbps
-                    profileLevel = AVVideoProfileLevelH264MainAutoLevel
-                }
-                
-                // Configure video settings based on quality
-                var videoSettings: [String: Any] = [
-                    AVVideoCodecKey: AVVideoCodecType.h264,
-                    AVVideoWidthKey: width,
-                    AVVideoHeightKey: height,
-                    AVVideoCompressionPropertiesKey: [
-                        AVVideoAverageBitRateKey: bitRate,
-                        AVVideoProfileLevelKey: profileLevel,
-                        AVVideoMaxKeyFrameIntervalKey: 60, // Keyframe every 2 seconds at 30fps
-                        AVVideoAllowFrameReorderingKey: false, // Reduce latency
-                        AVVideoExpectedSourceFrameRateKey: 30 // Expect 30fps
-                    ] as [String: Any]
-                ]
-                
-                // Create video input
-                videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-                
-                // Important: this needs to be true for real-time broadcasting
-                videoInput?.expectsMediaDataInRealTime = true
-                
-                // Configure the transform to handle rotation
-                // This will be set properly when we get the first sample buffer
-                // videoInput?.transform = CGAffineTransform(rotationAngle: CGFloat.pi/2) // For portrait
-                
-                if let videoInput = videoInput, assetWriter?.canAdd(videoInput) == true {
-                    assetWriter?.add(videoInput)
-                    isRecording = true
-                    hasReceivedFirstSample = false
-                    hasSamplesWaitingToWrite = false
-                    isFinishingRecording = false
-                    NSLog("Recording setup successfully with dimensions \(width)x\(height)")
-                } else {
-                    NSLog("Failed to add video input to asset writer")
-                    // Retry with different settings
-                    setupRecordingWithRetry(retryCount: retryCount + 1)
-                }
-            }
-        } catch {
-            NSLog("Failed to setup recording: \(error.localizedDescription)")
-            // Retry with delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.setupRecordingWithRetry(retryCount: retryCount + 1)
-            }
-        }
-    }
-    
-    
-    private func recordSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        guard isRecording,
-              !isFinishingRecording,
-              let assetWriter = assetWriter,
-              let videoInput = videoInput,
-              sampleBuffer.isValid else { return }
-        
-        // Check if this is the first sample
-        if !hasReceivedFirstSample {
-            firstSampleTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            
-            if let firstSampleTime = firstSampleTime {
-                hasReceivedFirstSample = true
-                
-                // Start writing session with first sample time
-                assetWriter.startWriting()
-                assetWriter.startSession(atSourceTime: firstSampleTime)
-                NSLog("Started writing session at \(CMTimeGetSeconds(firstSampleTime)) seconds")
-            }
-        }
-        
-        if assetWriter.status == .writing && videoInput.isReadyForMoreMediaData {
-            hasSamplesWaitingToWrite = true
-            
-            let appendSuccess = videoInput.append(sampleBuffer)
-            if !appendSuccess {
-                NSLog("Failed to append video sample buffer: \(assetWriter.status.rawValue)")
-                if let error = assetWriter.error {
-                    NSLog("AssetWriter error: \(error.localizedDescription)")
-                }
-            }
-        } else if assetWriter.status == .failed {
-            NSLog("AssetWriter failed: \(assetWriter.error?.localizedDescription ?? "unknown error")")
-        }
-    }
-    
-    private func finishRecording() {
-        guard isRecording,
-              !isFinishingRecording,
-              let assetWriter = assetWriter,
-              hasReceivedFirstSample,
-              hasSamplesWaitingToWrite else {
-            NSLog("Cannot finish recording: isRecording=\(isRecording), isFinishing=\(isFinishingRecording), hasFirstSample=\(hasReceivedFirstSample), hasSamples=\(hasSamplesWaitingToWrite)")
-            
-            // If we haven't received any samples, delete the empty file
-            cleanupFailedRecording()
-            return
-        }
-        
-        isFinishingRecording = true
-        isRecording = false
-        
-        // Mark inputs as finished
-        videoInput?.markAsFinished()
-        
-        // Use a semaphore to wait for finishing to complete
-        let semaphore = DispatchSemaphore(value: 0)
-        
-        NSLog("Finishing recording...")
-        
-        assetWriter.finishWriting { [weak self] in
-            guard let self = self, let url = self.recordingURL else {
-                semaphore.signal()
-                return
-            }
-            
-            if assetWriter.status == .completed {
-                NSLog("Successfully finished writing recording to \(url.path)")
-                
-                // Verify file exists and has content
-                let fileManager = FileManager.default
-                if fileManager.fileExists(atPath: url.path) {
-                    do {
-                        let attributes = try fileManager.attributesOfItem(atPath: url.path)
-                        if let fileSize = attributes[.size] as? NSNumber {
-                            NSLog("Recording file size: \(fileSize) bytes")
-                            
-                            if fileSize.int64Value > 10000 { // Ensure it has reasonable size
-                                // Save the recording path to UserDefaults
-                                UserDefaults(suiteName: self.groupID)?.set(url.path, forKey: "lastRecordingPath")
-                                NSLog("Saved recording path to UserDefaults")
-                            } else {
-                                NSLog("Recording file is too small (\(fileSize) bytes), may be corrupt")
-                                self.cleanupFailedRecording()
-                            }
-                        }
-                    } catch {
-                        NSLog("Failed to get recording file attributes: \(error.localizedDescription)")
-                    }
-                } else {
-                    NSLog("ERROR: Recording file does not exist at \(url.path)")
-                }
-            } else if let error = assetWriter.error {
-                NSLog("Failed to finish writing recording: \(error.localizedDescription)")
-                self.cleanupFailedRecording()
-            }
-            
-            semaphore.signal()
-        }
-        
-        // Wait for a reasonable timeout
-        _ = semaphore.wait(timeout: .now() + 5.0)
-        NSLog("Finished recording process")
-    }
-    
-    private func cleanupFailedRecording() {
-        if let url = recordingURL, FileManager.default.fileExists(atPath: url.path) {
-            do {
-                try FileManager.default.removeItem(at: url)
-                NSLog("Removed failed recording at \(url.path)")
-            } catch {
-                NSLog("Failed to remove recording: \(error.localizedDescription)")
-            }
-        }
-        
-        // Make sure we don't save the path to UserDefaults
-        UserDefaults(suiteName: groupID)?.removeObject(forKey: "lastRecordingPath")
     }
     
     // MARK: - Quality Settings
@@ -367,19 +148,178 @@ class SampleHandler: RPBroadcastSampleHandler {
             compressionQuality = 0.3
             frameSkip = 2
             downsizeFactor = 0.6
+            threshold = lowQualityThreshold
         case "high":
             compressionQuality = 0.85
             frameSkip = 0
             downsizeFactor = 1.0
+            threshold = highQualityThreshold
         default: // medium
             compressionQuality = 0.6
             frameSkip = 1
             downsizeFactor = 0.8
+            threshold = mediumQualityThreshold
+        }
+    }
+    
+    // MARK: - Local Recording
+    private func setupLocalRecording() {
+        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) else {
+            NSLog("Failed to get app group container URL")
+            return
+        }
+        
+        // Create Recordings directory if it doesn't exist
+        let recordingsDir = containerURL.appendingPathComponent("Recordings", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: recordingsDir.path) {
+            do {
+                try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+                NSLog("Created recordings directory at: %@", recordingsDir.path)
+            } catch {
+                NSLog("Failed to create recordings directory: %@", error.localizedDescription)
+                return
+            }
+        }
+        
+        // Create a unique filename
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = dateFormatter.string(from: Date())
+        let filename = "broadcast_\(timestamp).mp4"
+        recordingURL = recordingsDir.appendingPathComponent(filename)
+        
+        guard let recordingURL = recordingURL else {
+            NSLog("Failed to create recording URL")
+            return
+        }
+        
+        // Remove existing file if any
+        if FileManager.default.fileExists(atPath: recordingURL.path) {
+            do {
+                try FileManager.default.removeItem(at: recordingURL)
+            } catch {
+                NSLog("Failed to remove existing recording: %@", error.localizedDescription)
+            }
+        }
+        
+        // We'll initialize the AVAssetWriter when we get the first frame
+        // to ensure we have the correct video dimensions
+        NSLog("Recording setup complete. Will save to: %@", recordingURL.path)
+    }
+    
+    private func processForLocalRecording(_ sampleBuffer: CMSampleBuffer) {
+        guard let recordingURL = recordingURL else {
+            return
+        }
+        
+        // Initialize asset writer with the first frame
+        if assetWriter == nil {
+            do {
+                assetWriter = try AVAssetWriter(outputURL: recordingURL, fileType: .mp4)
+                
+                // Get video dimensions from sample buffer
+                guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else {
+                    NSLog("Failed to get format description")
+                    return
+                }
+                
+                // No need for optional binding here since this returns a struct directly
+                let dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
+                
+                // High quality recording settings
+                let videoSettings: [String: Any] = [
+                    AVVideoCodecKey: AVVideoCodecType.h264,
+                    AVVideoWidthKey: dimensions.width,
+                    AVVideoHeightKey: dimensions.height,
+                    AVVideoCompressionPropertiesKey: [
+                        AVVideoAverageBitRateKey: 6000000, // 6 Mbps
+                        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+                        AVVideoMaxKeyFrameIntervalKey: 30  // Keyframe every second at 30fps
+                    ]
+                ]
+                
+                videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+                videoInput?.expectsMediaDataInRealTime = true
+                
+                // Create pixel buffer adapter
+                let sourcePixelBufferAttributes: [String: Any] = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                    kCVPixelBufferWidthKey as String: dimensions.width,
+                    kCVPixelBufferHeightKey as String: dimensions.height
+                ]
+                
+                pixelBufferAdapter = AVAssetWriterInputPixelBufferAdaptor(
+                    assetWriterInput: videoInput!,
+                    sourcePixelBufferAttributes: sourcePixelBufferAttributes
+                )
+                
+                if let videoInput = videoInput, assetWriter!.canAdd(videoInput) {
+                    assetWriter!.add(videoInput)
+                } else {
+                    NSLog("Failed to add video input to asset writer")
+                    assetWriter = nil
+                    return
+                }
+                
+                // Start writing
+                let success = assetWriter!.startWriting()
+                if !success {
+                    NSLog("Failed to start writing: %@", assetWriter!.error?.localizedDescription ?? "Unknown error")
+                    assetWriter = nil
+                    return
+                }
+                
+                assetWriter!.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+                recordingStartTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                
+                NSLog("Started recording with dimensions: %dx%d", dimensions.width, dimensions.height)
+            } catch {
+                NSLog("Failed to create asset writer: %@", error.localizedDescription)
+                return
+            }
+        }
+        
+        // Write video frame
+        guard let videoInput = videoInput, videoInput.isReadyForMoreMediaData,
+              let recordingStartTime = recordingStartTime else {
+            return
+        }
+        
+        // Get presentation time
+        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let relativeTime = CMTimeSubtract(presentationTime, recordingStartTime)
+        
+        // Directly append sample buffer to the video input
+        videoInput.append(sampleBuffer)
+    }
+    
+    private func finalizeRecording(completion: @escaping (Bool) -> Void) {
+        guard let assetWriter = assetWriter else {
+            NSLog("No asset writer to finalize")
+            completion(false)
+            return
+        }
+        
+        // Mark input as finished
+        videoInput?.markAsFinished()
+        
+        // Finish writing
+        assetWriter.finishWriting {
+            let success = assetWriter.status == .completed
+            if success {
+                NSLog("Successfully finished writing recording to: %@", self.recordingURL?.path ?? "unknown")
+            } else if let error = assetWriter.error {
+                NSLog("Failed to finish writing: %@", error.localizedDescription)
+            }
+            
+            DispatchQueue.main.async {
+                completion(success)
+            }
         }
     }
 
     // MARK: – Helpers
-    private func jpegData(from buf: CMSampleBuffer) -> Data? {
+    private func jpegData(from buf: CMSampleBuffer, preserveOriginalDimensions: Bool = false) -> Data? {
         guard let pix = CMSampleBufferGetImageBuffer(buf) else { return nil }
         CVPixelBufferLockBaseAddress(pix, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pix, .readOnly) }
@@ -388,37 +328,25 @@ class SampleHandler: RPBroadcastSampleHandler {
         let h = CVPixelBufferGetHeight(pix)
         let ci = CIImage(cvPixelBuffer: pix)
         
-        // Resize threshold depends on quality level
-        let threshold: Int
-        switch qualityLevel {
-        case "low": threshold = lowQualityThreshold
-        case "high": threshold = highQualityThreshold
-        default: threshold = mediumQualityThreshold
-        }
-        
-        // Apply resize if needed - PRESERVE ASPECT RATIO
+        // Apply resize if needed and not preserving dimensions
         let img: CIImage
-        if w > threshold || h > threshold {
-            // Calculate scale factor while preserving aspect ratio
-            let widthScale = CGFloat(threshold) / CGFloat(w)
-            let heightScale = CGFloat(threshold) / CGFloat(h)
-            let scaleFactor = min(widthScale, heightScale) * downsizeFactor
-            
+        if !preserveOriginalDimensions && (w > threshold || h > threshold) {
+            let scaleFactor = CGFloat(threshold) / CGFloat(max(w, h)) * downsizeFactor
             img = ci.transformed(by: CGAffineTransform(
                 scaleX: scaleFactor,
                 y: scaleFactor
             ))
-        } else if downsizeFactor < 1.0 {
-            // Apply downsizing evenly to preserve aspect ratio
+        } else if !preserveOriginalDimensions && downsizeFactor < 1.0 {
+            // Apply downsizing even for smaller images in low/medium quality
             img = ci.transformed(by: CGAffineTransform(
                 scaleX: downsizeFactor,
                 y: downsizeFactor
             ))
         } else {
+            // Keep original dimensions
             img = ci
         }
 
-        // Ensure we're getting the entire image extent
         guard let cg = ciCtx.createCGImage(img, from: img.extent) else { return nil }
         return UIImage(cgImage: cg).jpegData(compressionQuality: compressionQuality)
     }

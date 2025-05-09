@@ -5,6 +5,7 @@ import SwiftUI
 /// Service for handling video creation and playback
 class VideoService {
     /// Prepares a video player with content
+    
     static func setupDemoVideo(player: AVPlayer, useLocalOnly: Bool = false, onPrepared: @escaping () -> Void) {
         if Constants.FeatureFlags.enableDebugLogging {
             print("Setting up demo video. Local only: \(useLocalOnly)")
@@ -23,6 +24,9 @@ class VideoService {
                         // Create player item and set it on main thread
                         let playerItem = AVPlayerItem(asset: asset)
                         
+                        // Configure player item for optimal playback
+                        playerItem.preferredForwardBufferDuration = 5.0
+                        
                         await MainActor.run {
                             // Set up observers before playing using closure-based notification
                             NotificationCenter.default.addObserver(
@@ -33,6 +37,10 @@ class VideoService {
                                 player.seek(to: .zero)
                                 player.play()
                             }
+                            
+                            // Configure player for optimal playback
+                            player.automaticallyWaitsToMinimizeStalling = false
+                            player.allowsExternalPlayback = false
                             
                             player.replaceCurrentItem(with: playerItem)
                             player.play()

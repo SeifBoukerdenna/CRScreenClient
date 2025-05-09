@@ -1,6 +1,7 @@
 // BroadcastRecord.swift
 import Foundation
 
+
 // BroadcastRecord model
 struct BroadcastRecord: Identifiable, Codable {
     var id: UUID = UUID()
@@ -8,6 +9,8 @@ struct BroadcastRecord: Identifiable, Codable {
     let duration: TimeInterval
     let fileURL: URL
     var fileSize: Int64 = 0
+    var width: Int = 0
+    var height: Int = 0
     
     var formattedDate: String {
         let formatter = DateFormatter()
@@ -29,5 +32,14 @@ struct BroadcastRecord: Identifiable, Codable {
         byteCountFormatter.countStyle = .file
         return byteCountFormatter.string(fromByteCount: fileSize)
     }
+    
+    var dimensionsFormatted: String {
+        if width > 0 && height > 0 {
+            return "\(width)x\(height)"
+        } else {
+            return "Unknown"
+        }
+    }
 }
+
 

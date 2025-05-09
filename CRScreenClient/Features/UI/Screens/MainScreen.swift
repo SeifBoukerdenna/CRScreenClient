@@ -99,8 +99,25 @@ struct MainScreen: View {
         .onChange(of: broadcastManager.isBroadcasting) { _, isNowBroadcasting in
             handleBroadcastStateChange(isNowBroadcasting)
         }
-        .onChange(of: shouldSetupVideo) { _, shouldSetup in
-            handleSetupVideoChange(shouldSetup)
+        .onChange(of: broadcastManager.isBroadcasting) { _, isNowBroadcasting in
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("Broadcast state changed: \(isNowBroadcasting ? "started" : "stopped")")
+            }
+            
+            if isNowBroadcasting {
+                shouldSetupVideo = true
+                isVideoPrepared = false
+            } else {
+                resetVideoState()
+                
+                // When broadcasting stops, force a refresh after a delay to ensure recording is processed
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        print("Refreshing storage manager after broadcast stopped")
+                    }
+                    broadcastManager.storageManager.refreshBroadcasts()
+                }
+            }
         }
         // Add a listener for the last recording URL
         .onChange(of: broadcastManager.lastRecordingURL) { _, url in

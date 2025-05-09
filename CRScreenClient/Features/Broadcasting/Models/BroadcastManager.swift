@@ -181,23 +181,29 @@ final class BroadcastManager: ObservableObject {
                     print("Found recording at: \(url.path)")
                 }
                 
-                // Validate the recording - FIXED: added self before method call
-                self.validateRecording(url: url) { [weak self] isValid, validDuration, trackCount in
-                    guard let self = self else { return }
+                // Skip validation and just add the recording directly
+                DispatchQueue.main.async {
+                    self.lastRecordingURL = url
+                    self.storageManager.addExistingRecording(url: url, duration: duration)
                     
-                    if isValid {
-                        if Constants.FeatureFlags.enableDebugLogging {
-                            print("Recording is valid with proper duration and tracks")
-                        }
-                        
-                        // Store in BroadcastStorageManager
-                        DispatchQueue.main.async {
-                            self.lastRecordingURL = url
-                            self.storageManager.addExistingRecording(url: url, duration: validDuration ?? duration)
-                        }
-                    } else {
-                        if Constants.FeatureFlags.enableDebugLogging {
-                            print("Recording is invalid or corrupted")
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        print("Added recording to storage: \(url.lastPathComponent)")
+                    }
+                    
+                    // Force refresh the broadcasts list
+                    self.storageManager.refreshBroadcasts()
+                }
+            } else {
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("⚠️ No recording found after broadcast ended")
+                    
+                    // Try to scan the recordings directory directly
+                    if let recordingsDir = self.recordingsDirectory {
+                        do {
+                            let files = try FileManager.default.contentsOfDirectory(at: recordingsDir, includingPropertiesForKeys: nil)
+                            print("Files in recordings directory: \(files.map { $0.lastPathComponent })")
+                        } catch {
+                            print("Error listing recordings directory: \(error)")
                         }
                     }
                 }
@@ -215,14 +221,25 @@ final class BroadcastManager: ObservableObject {
         }
     }
     
+    
     private func findLatestRecording(completion: @escaping (URL?) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self, let recordingsDir = self.recordingsDirectory else {
-                completion(nil)
+                DispatchQueue.main.async {
+                    completion(nil)
+                }
                 return
             }
             
             do {
+                // Make sure directory exists
+                if !FileManager.default.fileExists(atPath: recordingsDir.path) {
+                    try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true, attributes: nil)
+                    if Constants.FeatureFlags.enableDebugLogging {
+                        print("Created recordings directory")
+                    }
+                }
+                
                 // Get all files in the recordings directory
                 let fileURLs = try FileManager.default.contentsOfDirectory(
                     at: recordingsDir,
@@ -232,6 +249,17 @@ final class BroadcastManager: ObservableObject {
                 
                 // Filter for MP4 files
                 let mp4Files = fileURLs.filter { $0.pathExtension.lowercased() == "mp4" }
+                
+                if Constants.FeatureFlags.enableDebugLogging {
+                    print("Found \(mp4Files.count) mp4 files in recordings directory")
+                }
+                
+                if mp4Files.isEmpty {
+                    DispatchQueue.main.async {
+                        completion(nil)
+                    }
+                    return
+                }
                 
                 // Sort by creation date, newest first
                 let sortedFiles = try mp4Files.sorted { (url1, url2) -> Bool in
@@ -258,8 +286,13 @@ final class BroadcastManager: ObservableObject {
                         byteCountFormatter.countStyle = .file
                         let readableSize = byteCountFormatter.string(fromByteCount: fileSize)
                         
-                        print("Found recording at \(file.path)")
+                        // Get creation date
+                        let fileAttributes = try file.resourceValues(forKeys: [.creationDateKey])
+                        let creationDate = fileAttributes.creationDate?.description ?? "unknown"
+                        
+                        print("Found recording at: \(file.path)")
                         print("Recording file size: \(readableSize)")
+                        print("Creation date: \(creationDate)")
                     }
                 }
                 
@@ -279,7 +312,7 @@ final class BroadcastManager: ObservableObject {
     
     private func validateRecording(url: URL, completion: @escaping (Bool, TimeInterval?, Int) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let asset = AVAsset(url: url)
+            let asset = AVURLAsset(url: url)
             
             // Check duration and tracks
             Task {

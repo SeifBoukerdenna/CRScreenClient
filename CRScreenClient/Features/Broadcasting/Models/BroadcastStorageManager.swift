@@ -110,7 +110,7 @@ class BroadcastStorageManager: ObservableObject {
     }
     
     private func processNewRecording(url: URL) {
-        let asset = AVAsset(url: url)
+        let asset = AVURLAsset(url: url)
         
         Task {
             do {
@@ -122,9 +122,25 @@ class BroadcastStorageManager: ObservableObject {
                 let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
                 let fileSize = attributes[.size] as? Int64 ?? 0
                 
-                // Get duration
+                // Get duration and dimensions
                 let duration = try await asset.load(.duration)
                 let durationInSeconds = CMTimeGetSeconds(duration)
+                
+                // Get video dimensions
+                let tracks = try await asset.loadTracks(withMediaType: .video)
+                let trackDimensions: CGSize = if let videoTrack = tracks.first {
+                    try await videoTrack.load(.naturalSize)
+                } else {
+                    CGSize.zero
+                }
+                
+                // Create local copies of width and height to avoid concurrency issues
+                let videoWidth = Int(trackDimensions.width)
+                let videoHeight = Int(trackDimensions.height)
+                
+                if Constants.FeatureFlags.enableDebugLogging && trackDimensions != .zero {
+                    print("Video dimensions: \(videoWidth)x\(videoHeight)")
+                }
                 
                 // Recording is valid if it has a positive duration
                 if durationInSeconds > 0 {
@@ -136,7 +152,9 @@ class BroadcastStorageManager: ObservableObject {
                             date: creationDate,
                             duration: durationInSeconds,
                             fileURL: url,
-                            fileSize: fileSize
+                            fileSize: fileSize,
+                            width: videoWidth,
+                            height: videoHeight
                         )
                         
                         // Add to list and maintain sort order
@@ -175,39 +193,97 @@ class BroadcastStorageManager: ObservableObject {
                 return
             }
             
-            // Get file attributes
-            do {
-                let resourceValues = try url.resourceValues(forKeys: [.creationDateKey])
-                let creationDate = resourceValues.creationDate ?? Date()
-                
-                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-                let fileSize = attributes[.size] as? Int64 ?? 0
-                
-                // Create record
-                let record = BroadcastRecord(
-                    date: creationDate,
-                    duration: duration,
-                    fileURL: url,
-                    fileSize: fileSize
-                )
-                
-                // Add to list and maintain sort order
-                self.broadcasts.append(record)
-                self.broadcasts.sort { $0.date > $1.date }
-                
-                // Limit to max broadcasts
-                if self.broadcasts.count > self.maxBroadcasts {
-                    // We don't delete files here, just remove from the list
-                    self.broadcasts = Array(self.broadcasts.prefix(self.maxBroadcasts))
+            // Process the recording asynchronously
+            Task {
+                do {
+                    // Get file attributes
+                    let resourceValues = try url.resourceValues(forKeys: [.creationDateKey])
+                    let creationDate = resourceValues.creationDate ?? Date()
+                    
+                    let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                    let fileSize = attributes[.size] as? Int64 ?? 0
+                    
+                    // Get video dimensions
+                    let asset = AVURLAsset(url: url)
+                    let tracks = try await asset.loadTracks(withMediaType: .video)
+                    let trackDimensions: CGSize = if let videoTrack = tracks.first {
+                        try await videoTrack.load(.naturalSize)
+                    } else {
+                        CGSize.zero
+                    }
+                    
+                    // Create local copies to avoid concurrency issues
+                    let videoWidth = Int(trackDimensions.width)
+                    let videoHeight = Int(trackDimensions.height)
+                    
+                    if Constants.FeatureFlags.enableDebugLogging && trackDimensions != .zero {
+                        print("Video dimensions: \(videoWidth)x\(videoHeight)")
+                    }
+                    
+                    // Create record with all info
+                    await MainActor.run { [weak self] in
+                        guard let self = self else { return }
+                        
+                        // Create record
+                        let record = BroadcastRecord(
+                            date: creationDate,
+                            duration: duration,
+                            fileURL: url,
+                            fileSize: fileSize,
+                            width: videoWidth,
+                            height: videoHeight
+                        )
+                        
+                        // Add to list and maintain sort order
+                        self.broadcasts.append(record)
+                        self.broadcasts.sort { $0.date > $1.date }
+                        
+                        // Limit to max broadcasts
+                        if self.broadcasts.count > self.maxBroadcasts {
+                            // We don't delete files here, just remove from the list
+                            self.broadcasts = Array(self.broadcasts.prefix(self.maxBroadcasts))
+                        }
+                        
+                        self.saveBroadcasts()
+                        
+                        if Constants.FeatureFlags.enableDebugLogging {
+                            print("Added broadcast to recent list: \(url.lastPathComponent)")
+                        }
+                    }
+                } catch {
+                    Logger.error("Failed to add existing recording: \(error)", to: Logger.app)
+                    
+                    // Create a basic record without dimensions if there was an error
+                    await MainActor.run { [weak self] in
+                        guard let self = self else { return }
+                        
+                        do {
+                            let resourceValues = try url.resourceValues(forKeys: [.creationDateKey])
+                            let creationDate = resourceValues.creationDate ?? Date()
+                            
+                            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                            let fileSize = attributes[.size] as? Int64 ?? 0
+                            
+                            let record = BroadcastRecord(
+                                date: creationDate,
+                                duration: duration,
+                                fileURL: url,
+                                fileSize: fileSize
+                            )
+                            
+                            self.broadcasts.append(record)
+                            self.broadcasts.sort { $0.date > $1.date }
+                            
+                            if self.broadcasts.count > self.maxBroadcasts {
+                                self.broadcasts = Array(self.broadcasts.prefix(self.maxBroadcasts))
+                            }
+                            
+                            self.saveBroadcasts()
+                        } catch {
+                            Logger.error("Failed to create basic record: \(error)", to: Logger.app)
+                        }
+                    }
                 }
-                
-                self.saveBroadcasts()
-                
-                if Constants.FeatureFlags.enableDebugLogging {
-                    print("Added broadcast to recent list: \(url.lastPathComponent)")
-                }
-            } catch {
-                Logger.error("Failed to add existing recording: \(error)", to: Logger.app)
             }
         }
     }

@@ -44,7 +44,7 @@ class RecordingManager {
             }
             
             // Verify it's a valid media file by checking asset properties
-            let asset = AVAsset(url: url)
+            let asset = AVURLAsset(url: url)
             
             // Log file details for debugging
             Task {
