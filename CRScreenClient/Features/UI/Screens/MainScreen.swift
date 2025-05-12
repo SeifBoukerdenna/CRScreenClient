@@ -15,6 +15,13 @@ struct MainScreen: View {
     @State private var showSettings = false
     @State private var showBroadcastSavedToast = false
     
+    // Debug-related state
+    @State private var showDebugMenu = false
+    @EnvironmentObject private var appEnvironment: AppEnvironment
+    private var debugSettings: DebugSettings {
+        appEnvironment.debugSettings
+    }
+    
     // Get app version and build number from Info.plist
      private var appVersion: String {
          let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1"
@@ -34,7 +41,7 @@ struct MainScreen: View {
             .ignoresSafeArea()
             
             VStack(spacing: 20) {
-                // Top bar with settings button
+                // Top bar with settings button and debug button
                 HStack {
                     Spacer()
                     
@@ -70,13 +77,48 @@ struct MainScreen: View {
                     }
                     .buttonStyle(ClashRoyaleButtonStyle())
                     
+                    // Add some space between buttons
+                    if debugSettings.debugModeEnabled {
+                        Spacer().frame(width: 8)
+                        
+                        // Debug menu button
+                        Button(action: {
+                            showDebugMenu = true
+                        }) {
+                            Image(systemName: "ladybug.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.red.opacity(0.8))
+                                .padding(8)
+                                .background(
+                                    Circle()
+                                        .fill(Color.crNavy.opacity(0.7))
+                                        .overlay(
+                                            Circle()
+                                                .strokeBorder(Color.red.opacity(0.5), lineWidth: 1.5)
+                                        )
+                                )
+                        }
+                    }
+                    
                     Spacer()
                 }
                 .padding(.top, 8)
                 
-                // Player View
-                if broadcastManager.isBroadcasting {
+                // Player View - only show if not disabled in debug settings
+                if broadcastManager.isBroadcasting && !debugSettings.disableVideoPreview {
                     videoPlayerSection
+                } else if broadcastManager.isBroadcasting && debugSettings.disableVideoPreview {
+                    // Show placeholder when video is disabled
+                    Text("Video Preview Disabled")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.black.opacity(0.3))
+                        )
+                        .padding(.top, 10)
                 } else {
                     // When not broadcasting, add some space
                     Spacer().frame(height: 20)
@@ -104,6 +146,11 @@ struct MainScreen: View {
                     .font(.system(size: 14))
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.bottom, 8)
+                    .onTapGesture(count: 5) {
+                            // Show debug menu on 5 taps of the version number
+                            debugSettings.debugModeEnabled = true
+                            showDebugMenu = true
+                        }
             }
             .padding(.horizontal)
             .sheet(isPresented: $showQualitySettings) {
@@ -117,6 +164,11 @@ struct MainScreen: View {
             }
             .fullScreenCover(isPresented: $showRecentBroadcasts) {
                 RecentBroadcastsScreen(storageManager: broadcastManager.storageManager)
+            }
+            .sheet(isPresented: $showDebugMenu) {
+                NavigationView {
+                    DebugMenuScreen(debugSettings: debugSettings)
+                }
             }
             
             // Toast notification for saved broadcast
@@ -147,6 +199,14 @@ struct MainScreen: View {
                 .transition(.opacity)
             }
         }
+        .gesture(
+    // Secret triple-tap gesture to enable debug mode
+    TapGesture(count: 3)
+        .onEnded {
+            debugSettings.debugModeEnabled = true
+            showDebugMenu = true
+        }
+)
         .background(
             BroadcastPickerHelper(
                 extensionID: Constants.Broadcast.extensionID,
@@ -287,6 +347,14 @@ struct MainScreen: View {
                     color: .crGold.opacity(0.9)
                 )
             }
+            
+            // Show debug indicator if debug mode is enabled
+            if debugSettings.debugModeEnabled && broadcastManager.isBroadcasting {
+                CapsuleLabel(
+                    text: "DEBUG",
+                    color: .red.opacity(0.7)
+                )
+            }
         }
     }
     
@@ -420,10 +488,11 @@ struct MainScreen: View {
                 .buttonStyle(ClashRoyaleButtonStyle())
             }
             
-            // PiP Button - only show if feature flag is enabled
+            // PiP Button - only shown when broadcasting and video is prepared
             if Constants.FeatureFlags.enablePictureInPicture &&
                broadcastManager.isBroadcasting &&
-               isVideoPrepared {
+               isVideoPrepared &&
+               !debugSettings.disableVideoPreview {
                 Button(action: {
                     pipManager.togglePiP()
                 }) {
@@ -451,7 +520,7 @@ struct MainScreen: View {
     // MARK: - Event Handlers
     
     private func handleAppear() {
-        if broadcastManager.isBroadcasting && !isVideoPrepared {
+        if broadcastManager.isBroadcasting && !isVideoPrepared && !debugSettings.disableVideoPreview {
             shouldSetupVideo = true
         }
     }
@@ -468,8 +537,11 @@ struct MainScreen: View {
         }
         
         if isNowBroadcasting {
-            shouldSetupVideo = true
-            isVideoPrepared = false
+            // Only setup video if preview is not disabled in debug settings
+            if !debugSettings.disableVideoPreview {
+                shouldSetupVideo = true
+                isVideoPrepared = false
+            }
         } else {
             resetVideoState()
             
@@ -483,21 +555,26 @@ struct MainScreen: View {
         }
     }
     
-    private func handleSetupVideoChange(_ shouldSetup: Bool) {
-        if shouldSetup {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                VideoService.setupDemoVideo(
-                    player: player,
-                    useLocalOnly: Constants.FeatureFlags.useLocalVideoOnly
-                ) {
-                    isVideoPrepared = true
-                }
-                shouldSetupVideo = false
-            }
-        }
-    }
-    
     private func toggleBroadcast() {
+        // Pass the custom server URL if using custom server in debug settings
+        if debugSettings.useCustomServer && !debugSettings.customServerURL.isEmpty {
+            // Prepare server URL by combining base url with session code
+            UserDefaults(suiteName: Constants.Broadcast.groupID)?.set(
+                debugSettings.useCustomServer,
+                forKey: "debug_useCustomServer"
+            )
+            UserDefaults(suiteName: Constants.Broadcast.groupID)?.set(
+                debugSettings.customServerURL,
+                forKey: "debug_customServerURL"
+            )
+        }
+        
+        // Pass the local recording flag to the broadcast extension
+        UserDefaults(suiteName: Constants.Broadcast.groupID)?.set(
+            debugSettings.disableLocalRecording,
+            forKey: "debug_disableLocalRecording"
+        )
+        
         BroadcastService.shared.toggleBroadcast(
             using: broadcastButton,
             manager: broadcastManager

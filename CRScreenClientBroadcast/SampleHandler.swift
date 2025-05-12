@@ -39,6 +39,11 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var qualityLevel = "medium" // Default quality level
     private var threshold: Int = 1280 // Will be set based on quality
     
+    // Debug settings
+    private var disableLocalRecording = false
+    private var useCustomServer = false
+    private var customServerURL = ""
+    
     // Local recording
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
@@ -48,15 +53,38 @@ class SampleHandler: RPBroadcastSampleHandler {
 
     // MARK: – Lifecycle
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
-        // 1) retrieve saved 4‑digit code
+        // Get the defaults from the app group
         let defaults = UserDefaults(suiteName: groupID)
+        
+        // 1) Retrieve saved 4‑digit code
         sessionCode = defaults?.string(forKey: kCodeKey) ?? "0000"
         
-        // Get the server URL
-        let serverBase = "http://192.168.2.12:8080/upload/"
-        uploadURL = URL(string: "\(serverBase)\(sessionCode)") ?? uploadURL
+        // 2) Get debug settings
+        disableLocalRecording = defaults?.bool(forKey: "debug_disableLocalRecording") ?? false
+        useCustomServer = defaults?.bool(forKey: "debug_useCustomServer") ?? false
+        customServerURL = defaults?.string(forKey: "debug_customServerURL") ?? ""
+        
+        // 3) Get the server URL
+        if useCustomServer && !customServerURL.isEmpty {
+            var customURL = customServerURL
+            
+            // Check if the custom URL already includes the protocol
+            if !customURL.hasPrefix("http://") && !customURL.hasPrefix("https://") {
+                customURL = "http://" + customURL
+            }
+            
+            if !customURL.hasSuffix("/") {
+                customURL += "/"
+            }
+            
+            uploadURL = URL(string: "\(customURL)\(sessionCode)") ?? uploadURL
+            NSLog("Using custom server URL: \(uploadURL.absoluteString)")
+        } else {
+            let serverBase = "http://192.168.2.12:8080/upload/"
+            uploadURL = URL(string: "\(serverBase)\(sessionCode)") ?? uploadURL
+        }
 
-        // 2) Get quality level from UserDefaults or setupInfo
+        // 4) Get quality level from UserDefaults or setupInfo
         if let savedQuality = defaults?.string(forKey: kQualityKey) {
             qualityLevel = savedQuality
         } else if let quality = setupInfo?["qualityLevel"] as? String {
@@ -66,8 +94,12 @@ class SampleHandler: RPBroadcastSampleHandler {
         // Apply quality settings
         applyQualitySettings(qualityLevel)
         
-        // Set up local recording
-        setupLocalRecording()
+        // Set up local recording if not disabled
+        if !disableLocalRecording {
+            setupLocalRecording()
+        } else {
+            NSLog("Local recording is disabled by debug settings")
+        }
         
         defaults?.set(Date(), forKey: kStartedAtKey)
         NSLog("Broadcast started (code \(sessionCode), quality \(qualityLevel))")
@@ -83,8 +115,10 @@ class SampleHandler: RPBroadcastSampleHandler {
 
         frameCount += 1
         
-        // Process for local recording regardless of frame skip
-        processForLocalRecording(sb)
+        // Process for local recording if not disabled
+        if !disableLocalRecording {
+            processForLocalRecording(sb)
+        }
         
         // Skip frames for server upload based on quality settings
         if frameCount % (frameSkip + 1) != 0 { return }
@@ -115,27 +149,31 @@ class SampleHandler: RPBroadcastSampleHandler {
     override func broadcastFinished() {
         NSLog("Broadcast finished")
         
-        // Finalize local recording
-        finalizeRecording { success in
-            if success {
-                NSLog("Successfully finalized local recording")
-            } else {
-                NSLog("Failed to finalize local recording")
-            }
-            
-            // Log the recordings directory path
-            if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: self.groupID) {
-                let recordingsDir = containerURL.appendingPathComponent("Recordings", isDirectory: true)
-                NSLog("Recordings directory: %@", recordingsDir.path)
+        // Finalize local recording if not disabled
+        if !disableLocalRecording {
+            finalizeRecording { success in
+                if success {
+                    NSLog("Successfully finalized local recording")
+                } else {
+                    NSLog("Failed to finalize local recording")
+                }
                 
-                // List all files in the recordings directory
-                do {
-                    let files = try FileManager.default.contentsOfDirectory(atPath: recordingsDir.path)
-                    NSLog("Files in recordings directory: %@", files.joined(separator: ", "))
-                } catch {
-                    NSLog("Failed to list recordings directory: %@", error.localizedDescription)
+                // Log the recordings directory path
+                if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: self.groupID) {
+                    let recordingsDir = containerURL.appendingPathComponent("Recordings", isDirectory: true)
+                    NSLog("Recordings directory: %@", recordingsDir.path)
+                    
+                    // List all files in the recordings directory
+                    do {
+                        let files = try FileManager.default.contentsOfDirectory(atPath: recordingsDir.path)
+                        NSLog("Files in recordings directory: %@", files.joined(separator: ", "))
+                    } catch {
+                        NSLog("Failed to list recordings directory: %@", error.localizedDescription)
+                    }
                 }
             }
+        } else {
+            NSLog("Local recording was disabled - no recording to finalize")
         }
         
         UserDefaults(suiteName: groupID)?.removeObject(forKey: kStartedAtKey)

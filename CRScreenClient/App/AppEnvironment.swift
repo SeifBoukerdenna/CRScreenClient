@@ -7,6 +7,9 @@ class AppEnvironment: ObservableObject {
     @Published var appTheme: AppTheme = .standard
     @Published var debugMode: Bool = false
     
+    // Debug settings
+    @Published var debugSettings = DebugSettings()
+    
     private var cancellables = Set<AnyCancellable>()
     
     init() {
