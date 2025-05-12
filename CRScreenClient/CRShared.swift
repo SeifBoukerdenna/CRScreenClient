@@ -4,7 +4,7 @@ import SwiftUI
 enum Constants {
     enum URLs {
         static let demoVideo = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-        static let broadcastServer = "http://10.20.5.212:8080/upload/"
+        static let broadcastServer = "http://192.168.2.12:8080/upload/"
 //        static let broadcastServer = "http://172.20.10.3:8080/upload/"
         static let webApp = "royaltrainer.com"
     }
