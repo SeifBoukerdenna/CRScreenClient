@@ -19,14 +19,23 @@ class SignalingClient: NSObject {
     
     weak var delegate: SignalingClientDelegate?
     
+    // MARK: - Connection State Management
     private var isConnected = false
-    private let reconnectDelay: TimeInterval = 3.0
+    private var isManualDisconnect = false
+    private var shouldMaintainConnection = true
+    private let reconnectDelay: TimeInterval = 5.0
     private var reconnectTimer: Timer?
-    private let maxReconnectAttempts = 15
+    private let maxReconnectAttempts = 8
     private var reconnectAttempts = 0
     private var keepAliveTimer: Timer?
     private var lastPongReceived = Date()
     private var connectionTimeoutTimer: Timer?
+    
+    // MARK: - Health Monitoring
+    private var connectionStartTime: Date?
+    private var lastMessageTime = Date()
+    private let messageTimeout: TimeInterval = 45.0
+    private let connectionHealthCheckInterval: TimeInterval = 20.0
     
     // MARK: - Initialization
     init(url: URL, sessionCode: String) {
@@ -37,46 +46,95 @@ class SignalingClient: NSObject {
         setupURLSession()
     }
     
+    deinit {
+        NSLog("SignalingClient: Deinitializing for session \(sessionCode)")
+        cleanupTimers()
+        cleanupConnection()
+    }
+    
     private func setupURLSession() {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10
-        config.timeoutIntervalForResource = 30
+        config.timeoutIntervalForRequest = 8
+        config.timeoutIntervalForResource = 20
+        config.waitsForConnectivity = false
         urlSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
     }
     
     // MARK: - Connection Management
     func connect() {
-        guard !isConnected else {
-            NSLog("SignalingClient: Already connected")
+        guard shouldMaintainConnection else {
+            NSLog("SignalingClient: Connection disabled, skipping connect")
             return
         }
+        
+        guard !isConnected else {
+            NSLog("SignalingClient: Already connected to session \(sessionCode)")
+            return
+        }
+        
+        isManualDisconnect = false
+        connectionStartTime = Date()
         
         var request = URLRequest(url: url)
         request.setValue("Bearer \(sessionCode)", forHTTPHeaderField: "Authorization")
         request.setValue("webrtc-broadcast", forHTTPHeaderField: "Sec-WebSocket-Protocol")
-        request.timeoutInterval = 15.0 // Increased timeout
+        request.timeoutInterval = 12.0
         
         webSocket = urlSession?.webSocketTask(with: request)
         webSocket?.resume()
         
-        // Set connection timeout
         startConnectionTimeout()
         
-        NSLog("SignalingClient: Connecting to \(url.absoluteString)")
+        NSLog("SignalingClient: Connecting to \(url.absoluteString) (attempt \(reconnectAttempts + 1))")
         
-        // Start listening for messages
         receiveMessage()
         
-        // Send initial connection message
-        sendConnectionMessage()
+        // Send initial connection message with delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.sendConnectionMessage()
+        }
+    }
+    
+    func disconnect() {
+        NSLog("SignalingClient: Manual disconnect requested for session \(sessionCode)")
+        
+        // Mark as manual disconnect to prevent automatic reconnection
+        isManualDisconnect = true
+        shouldMaintainConnection = false
+        
+        cleanupTimers()
+        cleanupConnection()
+        
+        NSLog("SignalingClient: Manual disconnect completed")
+    }
+    
+    private func cleanupTimers() {
+        reconnectTimer?.invalidate()
+        reconnectTimer = nil
+        keepAliveTimer?.invalidate()
+        keepAliveTimer = nil
+        connectionTimeoutTimer?.invalidate()
+        connectionTimeoutTimer = nil
+    }
+    
+    private func cleanupConnection() {
+        if let ws = webSocket, ws.state == .running {
+            ws.cancel(with: .normalClosure, reason: nil)
+        }
+        
+        webSocket = nil
+        isConnected = false
+        connectionStartTime = nil
+        
+        NSLog("SignalingClient: Connection cleanup completed")
     }
     
     private func startConnectionTimeout() {
         connectionTimeoutTimer?.invalidate()
-        connectionTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: false) { [weak self] _ in
+        connectionTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 12.0, repeats: false) { [weak self] _ in
             guard let self = self, !self.isConnected else { return }
-            NSLog("SignalingClient: Connection timeout")
-            self.handleDisconnection()
+            NSLog("SignalingClient: Connection timeout after 12s")
+            self.handleConnectionFailure()
         }
     }
     
@@ -85,18 +143,20 @@ class SignalingClient: NSObject {
         connectionTimeoutTimer = nil
     }
     
+    // MARK: - Keep-Alive Management
     func sendKeepAlive() {
-        guard isConnected else { return }
+        guard isConnected && shouldMaintainConnection else { return }
         
         let message = ["type": "ping", "timestamp": Date().timeIntervalSince1970] as [String: Any]
         sendMessage(message)
+        NSLog("SignalingClient: Sent keep-alive ping")
     }
     
     private func startKeepAlive() {
         keepAliveTimer?.invalidate()
-        keepAliveTimer = Timer.scheduledTimer(withTimeInterval: 25.0, repeats: true) { [weak self] _ in
-            self?.sendKeepAlive()
-            self?.checkKeepAliveTimeout()
+        keepAliveTimer = Timer.scheduledTimer(withTimeInterval: connectionHealthCheckInterval, repeats: true) { [weak self] _ in
+            guard let self = self, self.shouldMaintainConnection else { return }
+            self.performHealthCheck()
         }
     }
     
@@ -105,61 +165,65 @@ class SignalingClient: NSObject {
         keepAliveTimer = nil
     }
     
+    private func performHealthCheck() {
+        checkKeepAliveTimeout()
+        sendKeepAlive()
+        
+        if let startTime = connectionStartTime {
+            let connectionDuration = Date().timeIntervalSince(startTime)
+            let timeSinceLastMessage = Date().timeIntervalSince(lastMessageTime)
+            
+            NSLog("SignalingClient: Health check - Duration: \(Int(connectionDuration))s, Last message: \(Int(timeSinceLastMessage))s ago")
+            
+            if timeSinceLastMessage > messageTimeout && shouldMaintainConnection {
+                NSLog("SignalingClient: No recent activity - triggering reconnection")
+                handleConnectionFailure()
+            }
+        }
+    }
+    
     private func checkKeepAliveTimeout() {
         let timeSinceLastPong = Date().timeIntervalSince(lastPongReceived)
-        if timeSinceLastPong > 60.0 { // 60 second timeout
-            NSLog("SignalingClient: Keep-alive timeout - forcing reconnection")
-            handleDisconnection()
+        if timeSinceLastPong > messageTimeout && shouldMaintainConnection {
+            NSLog("SignalingClient: Keep-alive timeout (\(Int(timeSinceLastPong))s) - triggering reconnection")
+            handleConnectionFailure()
         }
     }
     
-    func disconnect() {
-        reconnectTimer?.invalidate()
-        reconnectTimer = nil
-        reconnectAttempts = 0
+    // MARK: - Connection Failure Handling
+    private func handleConnectionFailure() {
+        NSLog("SignalingClient: Handling connection failure (manual: \(isManualDisconnect), should maintain: \(shouldMaintainConnection))")
         
-        if isConnected {
-            let closeCode = URLSessionWebSocketTask.CloseCode.normalClosure
-            webSocket?.cancel(with: closeCode, reason: nil)
-        }
-        
-        webSocket = nil
-        isConnected = false
-        
-        NSLog("SignalingClient: Disconnected")
-    }
-    
-    private func handlePongMessage(_ json: [String: Any]?) {
-        lastPongReceived = Date()
-        NSLog("SignalingClient: Received pong - connection healthy")
-    }
-    
-    private func handleDisconnection() {
-        isConnected = false
-        stopKeepAlive()
+        let wasConnected = isConnected
+        cleanupConnection()
         stopConnectionTimeout()
-        delegate?.signalingClientDidDisconnect(self)
         
-        // Attempt reconnection if not manually disconnected
-        if reconnectAttempts < maxReconnectAttempts {
+        if wasConnected && !isManualDisconnect {
+            delegate?.signalingClientDidDisconnect(self)
+        }
+        
+        // Only attempt reconnection if not manually disconnected and should maintain connection
+        if !isManualDisconnect && shouldMaintainConnection && reconnectAttempts < maxReconnectAttempts {
             scheduleReconnect()
-        } else {
-            NSLog("SignalingClient: Max reconnection attempts reached (\(maxReconnectAttempts))")
+        } else if reconnectAttempts >= maxReconnectAttempts {
+            NSLog("SignalingClient: Max reconnection attempts reached (\(maxReconnectAttempts)) - stopping")
+            shouldMaintainConnection = false
         }
     }
     
     private func scheduleReconnect() {
         reconnectAttempts += 1
         
-        // Exponential backoff with jitter
-        let baseDelay = min(Double(reconnectAttempts) * 2.0, 30.0)
-        let jitter = Double.random(in: 0...2.0)
+        let baseDelay = min(Double(reconnectAttempts) * 3.0, 30.0)
+        let jitter = Double.random(in: 0...3.0)
         let delay = baseDelay + jitter
         
-        NSLog("SignalingClient: Scheduling reconnect attempt \(reconnectAttempts)/\(maxReconnectAttempts) in \(delay)s")
+        NSLog("SignalingClient: Scheduling reconnect attempt \(reconnectAttempts)/\(maxReconnectAttempts) in \(Int(delay))s")
         
         reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            self?.connect()
+            guard let self = self, self.shouldMaintainConnection && !self.isManualDisconnect else { return }
+            NSLog("SignalingClient: Executing scheduled reconnection")
+            self.connect()
         }
     }
     
@@ -168,12 +232,13 @@ class SignalingClient: NSObject {
         webSocket?.receive { [weak self] result in
             switch result {
             case .success(let message):
+                self?.lastMessageTime = Date()
                 self?.handleWebSocketMessage(message)
                 self?.receiveMessage() // Continue listening
                 
             case .failure(let error):
                 NSLog("SignalingClient: Failed to receive message: \(error.localizedDescription)")
-                self?.handleDisconnection()
+                self?.handleConnectionFailure()
             }
         }
     }
@@ -202,6 +267,8 @@ class SignalingClient: NSObject {
                 return
             }
             
+            NSLog("SignalingClient: Received message type: \(messageType)")
+            
             switch messageType {
             case "connected":
                 handleConnectedMessage(json)
@@ -213,6 +280,9 @@ class SignalingClient: NSObject {
                 handlePongMessage(json)
             case "error":
                 handleErrorMessage(json)
+            case "broadcaster_disconnected":
+                NSLog("SignalingClient: Broadcaster disconnected notification received")
+                // Don't disconnect, just notify delegate
             default:
                 NSLog("SignalingClient: Unknown message type: \(messageType)")
             }
@@ -223,7 +293,6 @@ class SignalingClient: NSObject {
     }
     
     private func handleDataMessage(_ data: Data) {
-        // Handle binary data if needed
         NSLog("SignalingClient: Received binary message of \(data.count) bytes")
     }
     
@@ -234,11 +303,15 @@ class SignalingClient: NSObject {
         reconnectTimer?.invalidate()
         stopConnectionTimeout()
         
-        // Start keep-alive mechanism
         lastPongReceived = Date()
+        lastMessageTime = Date()
         startKeepAlive()
         
-        NSLog("SignalingClient: Connected successfully with keep-alive enabled")
+        if let connectionTime = connectionStartTime {
+            let connectDuration = Date().timeIntervalSince(connectionTime)
+            NSLog("SignalingClient: Connected successfully in \(String(format: "%.2f", connectDuration))s")
+        }
+        
         delegate?.signalingClientDidConnect(self)
     }
     
@@ -251,6 +324,7 @@ class SignalingClient: NSObject {
         let sessionType: RTCSdpType = (type == "offer") ? .offer : .answer
         let sessionDescription = RTCSessionDescription(type: sessionType, sdp: sdp)
         
+        NSLog("SignalingClient: Processing \(type) with SDP length: \(sdp.count)")
         delegate?.signalingClient(self, didReceiveSessionDescription: sessionDescription)
     }
     
@@ -271,13 +345,27 @@ class SignalingClient: NSObject {
         delegate?.signalingClient(self, didReceiveCandidate: iceCandidate)
     }
     
+    private func handlePongMessage(_ json: [String: Any]?) {
+        lastPongReceived = Date()
+        lastMessageTime = Date()
+        NSLog("SignalingClient: Received pong - connection healthy")
+    }
+    
     private func handleErrorMessage(_ json: [String: Any]?) {
-        let errorMessage = json?["message"] as? String ?? "Unknown error"
+        let errorMessage = json?["message"] as? String ?? "Unknown signaling error"
+        NSLog("SignalingClient: Server error: \(errorMessage)")
+        
         let error = NSError(domain: "SignalingClientError", code: -1, userInfo: [
             NSLocalizedDescriptionKey: errorMessage
         ])
         
         delegate?.signalingClient(self, didReceiveError: error)
+        
+        // Don't immediately disconnect on error, schedule a health check instead
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self = self, self.shouldMaintainConnection else { return }
+            self.performHealthCheck()
+        }
     }
     
     // MARK: - Sending Messages
@@ -288,6 +376,7 @@ class SignalingClient: NSObject {
             "sessionCode": sessionCode
         ]
         
+        NSLog("SignalingClient: Sending \(sessionDescription.type == .offer ? "offer" : "answer")")
         sendMessage(message)
     }
     
@@ -304,34 +393,32 @@ class SignalingClient: NSObject {
     }
     
     private func sendConnectionMessage() {
-        // Determine role based on context
         let role = determineConnectionRole()
         
         let message: [String: Any] = [
             "type": "connect",
             "sessionCode": sessionCode,
-            "role": role
+            "role": role,
+            "timestamp": Date().timeIntervalSince1970
         ]
         
-        sendMessage(message)
         NSLog("SignalingClient: Requesting connection as \(role)")
+        sendMessage(message)
     }
     
     private func determineConnectionRole() -> String {
-        // Check if this is being called from broadcast extension
         let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
         
         if bundleIdentifier.contains("Broadcast") {
             return "broadcaster"
         } else {
-            // Main app should always connect as viewer
             return "viewer"
         }
     }
     
     private func sendMessage(_ message: [String: Any]) {
         guard isConnected || webSocket?.state == .running else {
-            NSLog("SignalingClient: Cannot send message - not connected")
+            NSLog("SignalingClient: Cannot send message - not connected (state: \(webSocket?.state.rawValue ?? -1))")
             return
         }
         
@@ -339,9 +426,12 @@ class SignalingClient: NSObject {
             let jsonData = try JSONSerialization.data(withJSONObject: message)
             let jsonString = String(data: jsonData, encoding: .utf8)!
             
-            webSocket?.send(.string(jsonString)) { error in
+            webSocket?.send(.string(jsonString)) { [weak self] error in
                 if let error = error {
                     NSLog("SignalingClient: Failed to send message: \(error.localizedDescription)")
+                    self?.handleConnectionFailure()
+                } else {
+                    self?.lastMessageTime = Date()
                 }
             }
             
@@ -358,8 +448,13 @@ extension SignalingClient: URLSessionWebSocketDelegate {
     }
     
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
-        NSLog("SignalingClient: WebSocket closed with code: \(closeCode.rawValue)")
-        handleDisconnection()
+        let reasonString = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "none"
+        NSLog("SignalingClient: WebSocket closed with code: \(closeCode.rawValue), reason: \(reasonString)")
+        
+        // Only trigger failure handling if this wasn't a manual disconnect
+        if !isManualDisconnect {
+            handleConnectionFailure()
+        }
     }
 }
 
@@ -368,7 +463,14 @@ extension SignalingClient: URLSessionDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error = error {
             NSLog("SignalingClient: URLSession task completed with error: \(error.localizedDescription)")
-            handleDisconnection()
+            if !isManualDisconnect {
+                handleConnectionFailure()
+            }
         }
+    }
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        NSLog("SignalingClient: HTTP redirection attempted, blocking for security")
+        completionHandler(nil)
     }
 }

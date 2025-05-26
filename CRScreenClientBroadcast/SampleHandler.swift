@@ -20,20 +20,36 @@ class SampleHandler: RPBroadcastSampleHandler {
     private let kCodeKey = "sessionCode"
     private let kQualityKey = "streamQuality"
     
-    // MARK: - Video Processing
-    private var compressionQuality: CGFloat = 0.6
-    private var frameSkip = 1
-    private var downsizeFactor: CGFloat = 0.8
-    private var threshold: Int = 1280
+    // MARK: - Video Processing with Conservative Defaults
+    private var compressionQuality: CGFloat = 0.5
+    private var frameSkip = 2
+    private var downsizeFactor: CGFloat = 0.7
+    private var threshold: Int = 1080
     private let ciContext = CIContext(options: [.workingColorSpace: NSNull()])
     
-    // MARK: - State Management
+    // MARK: - Dynamic Performance Management
+    private var dynamicFrameSkip = 2
+    private var lastProcessTime = Date()
+    private let maxProcessingInterval: TimeInterval = 0.033
+    private var systemMonitorTimer: Timer?
+    private var currentCPUUsage: Double = 0
+    private var currentMemoryPressure: Double = 0
+    
+    // MARK: - State Management with Proper Lifecycle Control
     private var frameCount = 0
     private var lastLog = Date()
     private var processed = 0
     private var isWebRTCConnected = false
+    private var isSignalingConnected = false
+    private var hasEstablishedConnection = false
+    private var isBroadcastActive = true
     private var connectionAttempts = 0
-    private let maxConnectionAttempts = 10
+    private let maxConnectionAttempts = 5
+    
+    // MARK: - Adaptive Connection Management
+    private var currentBitrate = 800_000
+    private var connectionQualityScore = 1.0
+    private var lastConnectionCheck = Date()
     
     // MARK: - Local Recording
     private var disableLocalRecording = false
@@ -56,7 +72,14 @@ class SampleHandler: RPBroadcastSampleHandler {
     
     // MARK: - Lifecycle
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
+        NSLog("🚀 Broadcast session starting")
+        
         let defaults = UserDefaults(suiteName: groupID)
+        
+        // Initialize broadcast state
+        isBroadcastActive = true
+        hasEstablishedConnection = false
+        connectionAttempts = 0
         
         // Get session code and quality settings
         sessionCode = defaults?.string(forKey: kCodeKey) ?? "0000"
@@ -68,48 +91,57 @@ class SampleHandler: RPBroadcastSampleHandler {
             qualityLevel = quality
         }
         
+        // Apply conservative settings for stability
+        if qualityLevel == "high" {
+            qualityLevel = "medium"
+            NSLog("🛡️ Overriding high quality to medium for stability")
+        }
+        
         applyQualitySettings(qualityLevel)
+        dynamicFrameSkip = max(frameSkip, 2)
         
         // Mark broadcast as started
         defaults?.set(Date(), forKey: kStartedAtKey)
         
-        // Initialize WebRTC with proper sequencing
-        setupWebRTCWithRetry()
+        // Start system resource monitoring
+        startSystemMonitoring()
+        
+        // Initialize WebRTC with proper lifecycle management
+        initializeWebRTCSession()
         
         // Setup local recording if enabled
         if !disableLocalRecording {
             setupLocalRecording()
         }
         
-        NSLog("Broadcast started - Session: \(sessionCode), Quality: \(qualityLevel)")
+        NSLog("🚀 Broadcast started - Session: \(sessionCode), Quality: \(qualityLevel), Active: \(isBroadcastActive)")
     }
     
-    private func setupWebRTCWithRetry() {
-        connectionAttempts += 1
+    // MARK: - Proper WebRTC Initialization
+    private func initializeWebRTCSession() {
+        NSLog("📡 Initializing WebRTC session (attempt \(connectionAttempts + 1))")
         
-        if connectionAttempts > maxConnectionAttempts {
-            NSLog("❌ Max WebRTC connection attempts reached")
+        guard isBroadcastActive else {
+            NSLog("⚠️ Broadcast no longer active, skipping WebRTC initialization")
             return
         }
         
-        NSLog("🔄 WebRTC setup attempt \(connectionAttempts)/\(maxConnectionAttempts)")
+        connectionAttempts += 1
         
-        // Initialize WebRTC components
-        setupWebRTC()
-        
-        // If connection fails, retry after delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-            guard let self = self else { return }
-            
-            if !self.isWebRTCConnected && self.connectionAttempts < self.maxConnectionAttempts {
-                NSLog("⚠️ WebRTC not connected, retrying...")
-                self.cleanup()
-                self.setupWebRTCWithRetry()
-            }
+        if connectionAttempts > maxConnectionAttempts {
+            NSLog("❌ Max WebRTC connection attempts reached - continuing with local recording only")
+            return
         }
+        
+        setupWebRTC()
     }
     
     private func setupWebRTC() {
+        guard isBroadcastActive else {
+            NSLog("⚠️ Broadcast inactive, aborting WebRTC setup")
+            return
+        }
+        
         // Initialize peer connection factory
         peerConnectionFactory = createPeerConnectionFactory()
         
@@ -119,7 +151,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         // Create video track
         videoTrack = peerConnectionFactory.videoTrack(with: videoSource!, trackId: "video_track_\(sessionCode)")
         
-        // Setup signaling client
+        // Setup signaling client with proper lifecycle management
         let signalingURL = getSignalingURL()
         signalingClient = SignalingClient(url: signalingURL, sessionCode: sessionCode)
         signalingClient?.delegate = self
@@ -127,7 +159,36 @@ class SampleHandler: RPBroadcastSampleHandler {
         // Connect to signaling server
         signalingClient?.connect()
         
-        NSLog("📡 WebRTC initialized - Signaling: \(signalingURL)")
+        NSLog("📡 WebRTC components initialized - Signaling: \(signalingURL)")
+        
+        // Set connection timeout with proper state checking
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
+            guard let self = self, self.isBroadcastActive else { return }
+            
+            if !self.isWebRTCConnected && !self.hasEstablishedConnection {
+                NSLog("⚠️ WebRTC connection timeout - attempting retry")
+                self.retryConnection()
+            }
+        }
+    }
+    
+    private func retryConnection() {
+        guard isBroadcastActive && connectionAttempts < maxConnectionAttempts else {
+            NSLog("❌ Cannot retry - broadcast inactive or max attempts reached")
+            return
+        }
+        
+        NSLog("🔄 Retrying WebRTC connection")
+        
+        // Clean up current connection without terminating broadcast
+        cleanupWebRTCComponents()
+        
+        // Retry after delay
+        let delay = min(Double(connectionAttempts) * 2.0, 10.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self = self, self.isBroadcastActive else { return }
+            self.initializeWebRTCSession()
+        }
     }
     
     private func getSignalingURL() -> URL {
@@ -150,6 +211,11 @@ class SampleHandler: RPBroadcastSampleHandler {
     }
     
     private func createPeerConnection() {
+        guard isBroadcastActive else {
+            NSLog("⚠️ Broadcast inactive, skipping peer connection creation")
+            return
+        }
+        
         let config = RTCConfiguration()
         config.iceServers = [
             RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"]),
@@ -176,11 +242,85 @@ class SampleHandler: RPBroadcastSampleHandler {
             peerConnection?.add(videoTrack, streamIds: ["broadcast_stream"])
         }
         
-        NSLog("📞 Peer connection created")
+        NSLog("📞 Peer connection created successfully")
+    }
+    
+    // MARK: - System Resource Monitoring
+    private func startSystemMonitoring() {
+        systemMonitorTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            guard let self = self, self.isBroadcastActive else { return }
+            self.checkSystemResources()
+        }
+    }
+    
+    private func checkSystemResources() {
+        currentCPUUsage = getCurrentCPUUsage()
+        currentMemoryPressure = getCurrentMemoryPressure()
+        
+        // Adaptive frame skipping based on system load
+        if currentCPUUsage > 70 || currentMemoryPressure > 0.8 {
+            dynamicFrameSkip = min(dynamicFrameSkip + 1, 5)
+            NSLog("⚠️ High system load detected (CPU: \(currentCPUUsage)%, Mem: \(currentMemoryPressure)) - frame skip: \(dynamicFrameSkip)")
+        } else if currentCPUUsage < 40 && currentMemoryPressure < 0.5 {
+            dynamicFrameSkip = max(dynamicFrameSkip - 1, max(frameSkip, 1))
+        }
+        
+        adjustBitrateBasedOnSystem()
+    }
+    
+    private func getCurrentCPUUsage() -> Double {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        
+        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        
+        if kerr == KERN_SUCCESS {
+            return Double(info.resident_size) / (1024 * 1024 * 100)
+        }
+        return 0
+    }
+    
+    private func getCurrentMemoryPressure() -> Double {
+        let pageSize = vm_page_size
+        var vmInfo = vm_statistics64()
+        var infoCount = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
+        
+        let kerr = withUnsafeMutablePointer(to: &vmInfo) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &infoCount)
+            }
+        }
+        
+        if kerr == KERN_SUCCESS {
+            let totalPages = vmInfo.free_count + vmInfo.active_count + vmInfo.inactive_count + vmInfo.wire_count
+            let usedPages = totalPages - vmInfo.free_count
+            return Double(usedPages) / Double(totalPages)
+        }
+        return 0
+    }
+    
+    private func adjustBitrateBasedOnSystem() {
+        if currentCPUUsage > 60 || currentMemoryPressure > 0.7 {
+            currentBitrate = max(Int(Double(currentBitrate) * 0.8), 300_000)
+        } else if currentCPUUsage < 30 && currentMemoryPressure < 0.4 {
+            currentBitrate = min(Int(Double(currentBitrate) * 1.05), getBitrateForQuality())
+        }
+    }
+    
+    private func getBitrateForQuality() -> Int {
+        switch qualityLevel {
+        case "low": return 500_000
+        case "high": return 1_500_000
+        default: return 1_000_000
+        }
     }
     
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with type: RPSampleBufferType) {
-        guard type == .video else { return }
+        guard type == .video && isBroadcastActive else { return }
         
         frameCount += 1
         
@@ -189,23 +329,37 @@ class SampleHandler: RPBroadcastSampleHandler {
             processForLocalRecording(sampleBuffer)
         }
         
-        // Skip frames based on quality settings
-        if frameCount % (frameSkip + 1) != 0 { return }
+        // Dynamic frame skipping based on processing load and system resources
+        let now = Date()
+        let timeSinceLastProcess = now.timeIntervalSince(lastProcessTime)
         
-        // Send via WebRTC if connected
-        if isWebRTCConnected, let videoSource = videoSource {
+        if timeSinceLastProcess < maxProcessingInterval {
+            dynamicFrameSkip = min(dynamicFrameSkip + 1, 5)
+        } else if timeSinceLastProcess > maxProcessingInterval * 3 {
+            dynamicFrameSkip = max(dynamicFrameSkip - 1, max(frameSkip, 1))
+        }
+        
+        let effectiveFrameSkip = max(frameSkip, dynamicFrameSkip)
+        if frameCount % (effectiveFrameSkip + 1) != 0 { return }
+        
+        lastProcessTime = now
+        
+        // Send via WebRTC if connected and broadcast is active
+        if isWebRTCConnected && isBroadcastActive, let videoSource = videoSource {
             sendFrameViaWebRTC(sampleBuffer: sampleBuffer, videoSource: videoSource)
         }
         
         processed += 1
-        let now = Date()
-        if now.timeIntervalSince(lastLog) > 5 {
-            NSLog("📊 Stats: %.1f FPS, Quality: %@, WebRTC: %@",
-                  Double(processed) / now.timeIntervalSince(lastLog),
-                  qualityLevel,
-                  isWebRTCConnected ? "Connected" : "Disconnected")
+        let currentTime = Date()
+        if currentTime.timeIntervalSince(lastLog) > 10 {
+            let fps = Double(processed) / currentTime.timeIntervalSince(lastLog)
+            NSLog("📊 Stats: %.1f FPS, Quality: %@, Skip: %d, WebRTC: %@, Signaling: %@, CPU: %.1f%%, Mem: %.1f%%",
+                  fps, qualityLevel, effectiveFrameSkip,
+                  isWebRTCConnected ? "✅" : "❌",
+                  isSignalingConnected ? "✅" : "❌",
+                  currentCPUUsage, currentMemoryPressure * 100)
             processed = 0
-            lastLog = now
+            lastLog = currentTime
         }
     }
     
@@ -214,19 +368,24 @@ class SampleHandler: RPBroadcastSampleHandler {
         
         let timeStampNs = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sampleBuffer)) * 1_000_000_000
         
-        // Create RTCCVPixelBuffer
         let rtcPixelBuffer = RTCCVPixelBuffer(pixelBuffer: pixelBuffer)
         let videoFrame = RTCVideoFrame(buffer: rtcPixelBuffer, rotation: ._0, timeStampNs: Int64(timeStampNs))
         
-        // Send frame to video source
         videoSource.capturer(RTCVideoCapturer(), didCapture: videoFrame)
     }
     
     override func broadcastFinished() {
-        NSLog("🛑 Broadcast finished")
+        NSLog("🛑 Broadcast session ending")
         
-        // Close WebRTC connections
-        cleanup()
+        // Mark broadcast as inactive to prevent reconnection attempts
+        isBroadcastActive = false
+        
+        // Stop system monitoring
+        systemMonitorTimer?.invalidate()
+        systemMonitorTimer = nil
+        
+        // Properly close WebRTC connections
+        cleanupWebRTCComponents()
         
         // Finalize local recording if enabled
         if !disableLocalRecording {
@@ -236,45 +395,59 @@ class SampleHandler: RPBroadcastSampleHandler {
         }
         
         UserDefaults(suiteName: groupID)?.removeObject(forKey: kStartedAtKey)
+        NSLog("🛑 Broadcast session cleanup completed")
     }
     
-    private func cleanup() {
-        isWebRTCConnected = false
-        connectionAttempts = 0
+    // MARK: - Proper Cleanup Methods
+    private func cleanupWebRTCComponents() {
+        NSLog("🧹 Cleaning up WebRTC components")
         
+        // Close peer connection
         peerConnection?.close()
-        signalingClient?.disconnect()
-        
         peerConnection = nil
+        
+        // Disconnect signaling client properly
+        signalingClient?.disconnect()
+        signalingClient = nil
+        
+        // Reset connection state
+        isWebRTCConnected = false
+        isSignalingConnected = false
+        
+        // Clean up video components
         videoTrack = nil
         videoSource = nil
-        signalingClient = nil
         
         NSLog("🧹 WebRTC cleanup completed")
     }
     
-    // MARK: - Quality Settings (unchanged)
+    // MARK: - Quality Settings
     private func applyQualitySettings(_ quality: String) {
         switch quality {
         case "low":
-            compressionQuality = 0.3
-            frameSkip = 2
-            downsizeFactor = 0.6
-            threshold = 960
+            compressionQuality = 0.25
+            frameSkip = 3
+            downsizeFactor = 0.5
+            threshold = 720
+            currentBitrate = 400_000
         case "high":
-            compressionQuality = 0.85
-            frameSkip = 0
-            downsizeFactor = 1.0
-            threshold = 1600
-        default: // medium
-            compressionQuality = 0.6
+            compressionQuality = 0.7
             frameSkip = 1
-            downsizeFactor = 0.8
+            downsizeFactor = 0.85
             threshold = 1280
+            currentBitrate = 1_200_000
+        default:
+            compressionQuality = 0.5
+            frameSkip = 2
+            downsizeFactor = 0.7
+            threshold = 1080
+            currentBitrate = 800_000
         }
+        
+        NSLog("🎛️ Applied quality settings - Quality: \(quality), Bitrate: \(currentBitrate), Skip: \(frameSkip)")
     }
     
-    // MARK: - Local Recording Methods (unchanged from original)
+    // MARK: - Local Recording Methods
     private func setupLocalRecording() {
         guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) else {
             NSLog("Failed to get app group container URL")
@@ -320,7 +493,7 @@ class SampleHandler: RPBroadcastSampleHandler {
                     AVVideoWidthKey: dimensions.width,
                     AVVideoHeightKey: dimensions.height,
                     AVVideoCompressionPropertiesKey: [
-                        AVVideoAverageBitRateKey: 6000000,
+                        AVVideoAverageBitRateKey: currentBitrate,
                         AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
                         AVVideoMaxKeyFrameIntervalKey: 30
                     ]
@@ -419,22 +592,41 @@ extension SampleHandler: RTCPeerConnectionDelegate {
         
         switch newState {
         case .connected, .completed:
-            isWebRTCConnected = true
-            connectionAttempts = 0 // Reset on successful connection
-            NSLog("✅ WebRTC connection established")
+            if !hasEstablishedConnection {
+                hasEstablishedConnection = true
+                isWebRTCConnected = true
+                connectionAttempts = 0
+                connectionQualityScore = 1.0
+                NSLog("✅ WebRTC connection established successfully - maintaining signaling connection")
+                
+                // CRITICAL: Do NOT close signaling connection here
+                // The signaling channel must remain open for the duration of the broadcast
+            }
+        case .checking:
+            connectionQualityScore = max(connectionQualityScore - 0.1, 0.3)
+            NSLog("🔍 ICE connection checking...")
         case .disconnected:
             isWebRTCConnected = false
+            connectionQualityScore = max(connectionQualityScore - 0.3, 0.1)
             NSLog("⚠️ WebRTC connection lost")
-            // Attempt reconnection
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                self?.attemptReconnection()
+            
+            // Only attempt reconnection if broadcast is still active
+            if isBroadcastActive {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                    guard let self = self, self.isBroadcastActive else { return }
+                    self.attemptReconnection()
+                }
             }
         case .failed:
             isWebRTCConnected = false
+            connectionQualityScore = 0.0
             NSLog("❌ WebRTC connection failed")
-            // Attempt reconnection with cleanup
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-                self?.cleanupAndReconnect()
+            
+            if isBroadcastActive {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+                    guard let self = self, self.isBroadcastActive else { return }
+                    self.retryConnection()
+                }
             }
         case .closed:
             isWebRTCConnected = false
@@ -445,8 +637,8 @@ extension SampleHandler: RTCPeerConnectionDelegate {
     }
     
     private func attemptReconnection() {
-        guard connectionAttempts < maxConnectionAttempts else {
-            NSLog("❌ Max reconnection attempts reached")
+        guard isBroadcastActive && connectionAttempts < maxConnectionAttempts else {
+            NSLog("❌ Cannot reconnect - broadcast inactive or max attempts reached")
             return
         }
         
@@ -456,33 +648,11 @@ extension SampleHandler: RTCPeerConnectionDelegate {
         }
     }
     
-    private func cleanupAndReconnect() {
-        guard connectionAttempts < maxConnectionAttempts else {
-            NSLog("❌ Max reconnection attempts reached")
-            return
-        }
-        
-        NSLog("🧹 Cleanup and reconnect WebRTC...")
-        
-        // Close existing connections
-        peerConnection?.close()
-        signalingClient?.disconnect()
-        
-        // Reset connection state
-        peerConnection = nil
-        
-        // Wait a moment then reconnect
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            self?.setupWebRTCWithRetry()
-        }
-    }
-    
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {
         NSLog("ICE gathering state changed: \(newState.rawValue)")
     }
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
-        NSLog("Generated ICE candidate")
         signalingClient?.send(iceCandidate: candidate)
     }
     
@@ -510,13 +680,19 @@ extension SampleHandler: RTCDataChannelDelegate {
 extension SampleHandler: SignalingClientDelegate {
     func signalingClientDidConnect(_ signalingClient: SignalingClient) {
         NSLog("📡 Signaling connected - creating peer connection")
+        
+        guard isBroadcastActive else {
+            NSLog("⚠️ Broadcast inactive, ignoring signaling connection")
+            return
+        }
+        
+        isSignalingConnected = true
         createPeerConnection()
         
-        // Create offer as broadcaster
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         peerConnection?.offer(for: constraints) { [weak self] sessionDescription, error in
-            guard let self = self, let sessionDescription = sessionDescription else {
-                NSLog("❌ Failed to create offer: \(error?.localizedDescription ?? "Unknown error")")
+            guard let self = self, let sessionDescription = sessionDescription, self.isBroadcastActive else {
+                NSLog("❌ Failed to create offer or broadcast inactive: \(error?.localizedDescription ?? "Unknown error")")
                 return
             }
             
@@ -533,18 +709,24 @@ extension SampleHandler: SignalingClientDelegate {
     
     func signalingClientDidDisconnect(_ signalingClient: SignalingClient) {
         NSLog("📡❌ Signaling disconnected")
-        isWebRTCConnected = false
+        isSignalingConnected = false
         
-        // Attempt reconnection if we haven't exceeded max attempts
-        if connectionAttempts < maxConnectionAttempts {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-                self?.attemptReconnection()
+        // Only attempt reconnection if broadcast is still active and we haven't established a connection yet
+        if isBroadcastActive && connectionAttempts < maxConnectionAttempts {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+                guard let self = self, self.isBroadcastActive else { return }
+                self.attemptReconnection()
             }
         }
     }
     
     func signalingClient(_ signalingClient: SignalingClient, didReceiveSessionDescription sessionDescription: RTCSessionDescription) {
         NSLog("📡 Received session description: \(sessionDescription.type.rawValue)")
+        
+        guard isBroadcastActive else {
+            NSLog("⚠️ Broadcast inactive, ignoring session description")
+            return
+        }
         
         peerConnection?.setRemoteDescription(sessionDescription) { [weak self] error in
             if let error = error {
@@ -560,7 +742,11 @@ extension SampleHandler: SignalingClientDelegate {
     }
     
     func signalingClient(_ signalingClient: SignalingClient, didReceiveCandidate candidate: RTCIceCandidate) {
-        NSLog("📡 Received ICE candidate")
+        guard isBroadcastActive else {
+            NSLog("⚠️ Broadcast inactive, ignoring ICE candidate")
+            return
+        }
+        
         peerConnection?.add(candidate) { error in
             if let error = error {
                 NSLog("❌ Failed to add ICE candidate: \(error.localizedDescription)")
@@ -570,6 +756,14 @@ extension SampleHandler: SignalingClientDelegate {
     
     func signalingClient(_ signalingClient: SignalingClient, didReceiveError error: Error) {
         NSLog("📡❌ Signaling error: \(error.localizedDescription)")
-        isWebRTCConnected = false
+        isSignalingConnected = false
+        
+        // Only retry if broadcast is still active
+        if isBroadcastActive {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                guard let self = self, self.isBroadcastActive else { return }
+                self.retryConnection()
+            }
+        }
     }
 }
