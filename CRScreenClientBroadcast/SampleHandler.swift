@@ -20,7 +20,13 @@ class SampleHandler: RPBroadcastSampleHandler {
     private let kCodeKey = "sessionCode"
     private let kQualityKey = "streamQuality"
     
-    // MARK: - Video Processing with Conservative Defaults
+    // MARK: - Custom Settings from User Interface
+    private var customFrameRatio: Double = 1.0        // Frame processing ratio (1:1, 1:2, etc.)
+    private var customImageQuality: Double = 0.6      // Image compression quality (0.1-1.0)
+    private var customBitrate: Double = 800000        // Custom bitrate
+    private var customResolutionScale: Double = 0.8   // Resolution scaling factor
+    
+    // MARK: - Video Processing Variables
     private var compressionQuality: CGFloat = 0.5
     private var frameSkip = 2
     private var downsizeFactor: CGFloat = 0.7
@@ -34,8 +40,9 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var systemMonitorTimer: Timer?
     private var currentCPUUsage: Double = 0
     private var currentMemoryPressure: Double = 0
+    private var settingsRefreshTimer: Timer?
     
-    // MARK: - State Management with Proper Lifecycle Control
+    // MARK: - State Management
     private var frameCount = 0
     private var lastLog = Date()
     private var processed = 0
@@ -45,11 +52,6 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var isBroadcastActive = true
     private var connectionAttempts = 0
     private let maxConnectionAttempts = 5
-    
-    // MARK: - Adaptive Connection Management
-    private var currentBitrate = 800_000
-    private var connectionQualityScore = 1.0
-    private var lastConnectionCheck = Date()
     
     // MARK: - Local Recording
     private var disableLocalRecording = false
@@ -91,20 +93,20 @@ class SampleHandler: RPBroadcastSampleHandler {
             qualityLevel = quality
         }
         
-        // Apply conservative settings for stability
-        if qualityLevel == "high" {
-            qualityLevel = "medium"
-            NSLog("🛡️ Overriding high quality to medium for stability")
-        }
+        // Load custom settings from user preferences
+        loadCustomSettings()
         
-        applyQualitySettings(qualityLevel)
-        dynamicFrameSkip = max(frameSkip, 2)
+        // Apply settings (custom settings override quality presets)
+        applyCustomSettings()
         
         // Mark broadcast as started
         defaults?.set(Date(), forKey: kStartedAtKey)
         
         // Start system resource monitoring
         startSystemMonitoring()
+        
+        // Start settings refresh timer to pick up real-time changes
+        startSettingsRefreshTimer()
         
         // Initialize WebRTC with proper lifecycle management
         initializeWebRTCSession()
@@ -114,10 +116,71 @@ class SampleHandler: RPBroadcastSampleHandler {
             setupLocalRecording()
         }
         
-        NSLog("🚀 Broadcast started - Session: \(sessionCode), Quality: \(qualityLevel), Active: \(isBroadcastActive)")
+        NSLog("🚀 Broadcast started - Session: \(sessionCode), Custom Quality: \(Int(customImageQuality * 100))%, Frame Ratio: 1:\(Int(customFrameRatio)), Bitrate: \(Int(customBitrate/1000))k")
     }
     
-    // MARK: - Proper WebRTC Initialization
+    // MARK: - Custom Settings Management
+    
+    private func loadCustomSettings() {
+        let defaults = UserDefaults(suiteName: groupID)
+        
+        // Load custom settings with fallbacks
+        customFrameRatio = defaults?.double(forKey: "customFrameRatio") ?? 1.0
+        customImageQuality = defaults?.double(forKey: "customImageQuality") ?? 0.6
+        customBitrate = defaults?.double(forKey: "customBitrate") ?? 800000
+        customResolutionScale = defaults?.double(forKey: "customResolutionScale") ?? 0.8
+        
+        // Ensure values are within valid ranges
+        customFrameRatio = max(1.0, min(5.0, customFrameRatio))
+        customImageQuality = max(0.1, min(1.0, customImageQuality))
+        customBitrate = max(200000, min(2000000, customBitrate))
+        customResolutionScale = max(0.3, min(1.0, customResolutionScale))
+        
+        NSLog("📋 Loaded custom settings - Frame: 1:\(Int(customFrameRatio)), Quality: \(Int(customImageQuality * 100))%, Bitrate: \(Int(customBitrate/1000))k, Resolution: \(Int(customResolutionScale * 100))%")
+    }
+    
+    private func applyCustomSettings() {
+        // Apply custom frame ratio
+        frameSkip = max(1, Int(customFrameRatio) - 1)
+        dynamicFrameSkip = frameSkip
+        
+        // Apply custom image quality
+        compressionQuality = CGFloat(customImageQuality)
+        
+        // Apply custom resolution scaling
+        downsizeFactor = CGFloat(customResolutionScale)
+        
+        // Calculate threshold based on resolution scale
+        threshold = Int(1920 * customResolutionScale) // Base 1920 width scaled down
+        
+        NSLog("🎛️ Applied custom settings - FrameSkip: \(frameSkip), Quality: \(compressionQuality), Scale: \(downsizeFactor), Threshold: \(threshold)")
+    }
+    
+    private func startSettingsRefreshTimer() {
+        // Refresh settings every 3 seconds to pick up real-time changes
+        settingsRefreshTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            guard let self = self, self.isBroadcastActive else { return }
+            
+            let oldFrameRatio = self.customFrameRatio
+            let oldImageQuality = self.customImageQuality
+            let oldBitrate = self.customBitrate
+            let oldResolutionScale = self.customResolutionScale
+            
+            self.loadCustomSettings()
+            
+            // Check if any settings changed
+            if oldFrameRatio != self.customFrameRatio ||
+               oldImageQuality != self.customImageQuality ||
+               oldBitrate != self.customBitrate ||
+               oldResolutionScale != self.customResolutionScale {
+                
+                NSLog("🔄 Settings changed - updating stream parameters")
+                self.applyCustomSettings()
+            }
+        }
+    }
+    
+    // MARK: - WebRTC Initialization
     private func initializeWebRTCSession() {
         NSLog("📡 Initializing WebRTC session (attempt \(connectionAttempts + 1))")
         
@@ -142,26 +205,17 @@ class SampleHandler: RPBroadcastSampleHandler {
             return
         }
         
-        // Initialize peer connection factory
         peerConnectionFactory = createPeerConnectionFactory()
-        
-        // Create video source
         videoSource = peerConnectionFactory.videoSource()
-        
-        // Create video track
         videoTrack = peerConnectionFactory.videoTrack(with: videoSource!, trackId: "video_track_\(sessionCode)")
         
-        // Setup signaling client with proper lifecycle management
         let signalingURL = getSignalingURL()
         signalingClient = SignalingClient(url: signalingURL, sessionCode: sessionCode)
         signalingClient?.delegate = self
-        
-        // Connect to signaling server
         signalingClient?.connect()
         
-        NSLog("📡 WebRTC components initialized - Signaling: \(signalingURL)")
+        NSLog("📡 WebRTC components initialized with custom settings")
         
-        // Set connection timeout with proper state checking
         DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
             guard let self = self, self.isBroadcastActive else { return }
             
@@ -179,11 +233,8 @@ class SampleHandler: RPBroadcastSampleHandler {
         }
         
         NSLog("🔄 Retrying WebRTC connection")
-        
-        // Clean up current connection without terminating broadcast
         cleanupWebRTCComponents()
         
-        // Retry after delay
         let delay = min(Double(connectionAttempts) * 2.0, 10.0)
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self = self, self.isBroadcastActive else { return }
@@ -237,12 +288,11 @@ class SampleHandler: RPBroadcastSampleHandler {
             delegate: self
         )
         
-        // Add video track
         if let videoTrack = videoTrack {
             peerConnection?.add(videoTrack, streamIds: ["broadcast_stream"])
         }
         
-        NSLog("📞 Peer connection created successfully")
+        NSLog("📞 Peer connection created with custom bitrate: \(Int(customBitrate/1000))k")
     }
     
     // MARK: - System Resource Monitoring
@@ -257,15 +307,15 @@ class SampleHandler: RPBroadcastSampleHandler {
         currentCPUUsage = getCurrentCPUUsage()
         currentMemoryPressure = getCurrentMemoryPressure()
         
-        // Adaptive frame skipping based on system load
+        // More conservative dynamic adjustments with custom settings as base
         if currentCPUUsage > 70 || currentMemoryPressure > 0.8 {
-            dynamicFrameSkip = min(dynamicFrameSkip + 1, 5)
-            NSLog("⚠️ High system load detected (CPU: \(currentCPUUsage)%, Mem: \(currentMemoryPressure)) - frame skip: \(dynamicFrameSkip)")
+            let customFrameSkipBase = max(1, Int(customFrameRatio) - 1)
+            dynamicFrameSkip = min(customFrameSkipBase + 2, 5)
+            NSLog("⚠️ High system load - dynamic frame skip: \(dynamicFrameSkip) (base: \(customFrameSkipBase))")
         } else if currentCPUUsage < 40 && currentMemoryPressure < 0.5 {
-            dynamicFrameSkip = max(dynamicFrameSkip - 1, max(frameSkip, 1))
+            let customFrameSkipBase = max(1, Int(customFrameRatio) - 1)
+            dynamicFrameSkip = max(customFrameSkipBase, 1)
         }
-        
-        adjustBitrateBasedOnSystem()
     }
     
     private func getCurrentCPUUsage() -> Double {
@@ -303,22 +353,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         return 0
     }
     
-    private func adjustBitrateBasedOnSystem() {
-        if currentCPUUsage > 60 || currentMemoryPressure > 0.7 {
-            currentBitrate = max(Int(Double(currentBitrate) * 0.8), 300_000)
-        } else if currentCPUUsage < 30 && currentMemoryPressure < 0.4 {
-            currentBitrate = min(Int(Double(currentBitrate) * 1.05), getBitrateForQuality())
-        }
-    }
-    
-    private func getBitrateForQuality() -> Int {
-        switch qualityLevel {
-        case "low": return 500_000
-        case "high": return 1_500_000
-        default: return 1_000_000
-        }
-    }
-    
+    // MARK: - Enhanced Frame Processing with Custom Settings
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with type: RPSampleBufferType) {
         guard type == .video && isBroadcastActive else { return }
         
@@ -329,22 +364,14 @@ class SampleHandler: RPBroadcastSampleHandler {
             processForLocalRecording(sampleBuffer)
         }
         
-        // Dynamic frame skipping based on processing load and system resources
-        let now = Date()
-        let timeSinceLastProcess = now.timeIntervalSince(lastProcessTime)
-        
-        if timeSinceLastProcess < maxProcessingInterval {
-            dynamicFrameSkip = min(dynamicFrameSkip + 1, 5)
-        } else if timeSinceLastProcess > maxProcessingInterval * 3 {
-            dynamicFrameSkip = max(dynamicFrameSkip - 1, max(frameSkip, 1))
-        }
-        
+        // Apply custom frame ratio with dynamic adjustments
         let effectiveFrameSkip = max(frameSkip, dynamicFrameSkip)
-        if frameCount % (effectiveFrameSkip + 1) != 0 { return }
+        if frameCount % (Int(customFrameRatio)) != 0 { return }
         
+        let now = Date()
         lastProcessTime = now
         
-        // Send via WebRTC if connected and broadcast is active
+        // Send via WebRTC if connected with custom processing
         if isWebRTCConnected && isBroadcastActive, let videoSource = videoSource {
             sendFrameViaWebRTC(sampleBuffer: sampleBuffer, videoSource: videoSource)
         }
@@ -353,11 +380,11 @@ class SampleHandler: RPBroadcastSampleHandler {
         let currentTime = Date()
         if currentTime.timeIntervalSince(lastLog) > 10 {
             let fps = Double(processed) / currentTime.timeIntervalSince(lastLog)
-            NSLog("📊 Stats: %.1f FPS, Quality: %@, Skip: %d, WebRTC: %@, Signaling: %@, CPU: %.1f%%, Mem: %.1f%%",
-                  fps, qualityLevel, effectiveFrameSkip,
-                  isWebRTCConnected ? "✅" : "❌",
-                  isSignalingConnected ? "✅" : "❌",
-                  currentCPUUsage, currentMemoryPressure * 100)
+            let effectiveFPS = fps / customFrameRatio // Account for frame ratio
+            
+            NSLog("📊 Custom Stats: %.1f FPS (effective: %.1f), Quality: \(Int(customImageQuality * 100))%%, Ratio: 1:\(Int(customFrameRatio)), Scale: \(Int(customResolutionScale * 100))%%, WebRTC: %@",
+                  fps, effectiveFPS,
+                  isWebRTCConnected ? "✅" : "❌")
             processed = 0
             lastLog = currentTime
         }
@@ -366,28 +393,75 @@ class SampleHandler: RPBroadcastSampleHandler {
     private func sendFrameViaWebRTC(sampleBuffer: CMSampleBuffer, videoSource: RTCVideoSource) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
+        // Apply custom resolution scaling if needed
+        let processedPixelBuffer = applyCustomProcessing(to: pixelBuffer)
+        
         let timeStampNs = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sampleBuffer)) * 1_000_000_000
         
-        let rtcPixelBuffer = RTCCVPixelBuffer(pixelBuffer: pixelBuffer)
+        let rtcPixelBuffer = RTCCVPixelBuffer(pixelBuffer: processedPixelBuffer)
         let videoFrame = RTCVideoFrame(buffer: rtcPixelBuffer, rotation: ._0, timeStampNs: Int64(timeStampNs))
         
         videoSource.capturer(RTCVideoCapturer(), didCapture: videoFrame)
     }
     
+    private func applyCustomProcessing(to pixelBuffer: CVPixelBuffer) -> CVPixelBuffer {
+        // If resolution scale is 1.0, return original buffer
+        guard customResolutionScale < 0.95 else { return pixelBuffer }
+        
+        let originalWidth = CVPixelBufferGetWidth(pixelBuffer)
+        let originalHeight = CVPixelBufferGetHeight(pixelBuffer)
+        
+        let scaledWidth = Int(Double(originalWidth) * customResolutionScale)
+        let scaledHeight = Int(Double(originalHeight) * customResolutionScale)
+        
+        // Create CIImage from pixel buffer
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        
+        // Apply scaling
+        let scaleTransform = CGAffineTransform(scaleX: customResolutionScale, y: customResolutionScale)
+        let scaledImage = ciImage.transformed(by: scaleTransform)
+        
+        // Create output pixel buffer
+        let attrs = [
+            kCVPixelBufferCGImageCompatibilityKey: kCFBooleanTrue,
+            kCVPixelBufferCGBitmapContextCompatibilityKey: kCFBooleanTrue,
+            kCVPixelBufferWidthKey: scaledWidth,
+            kCVPixelBufferHeightKey: scaledHeight
+        ] as CFDictionary
+        
+        var outputPixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            scaledWidth,
+            scaledHeight,
+            kCVPixelFormatType_32BGRA,
+            attrs,
+            &outputPixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let outputBuffer = outputPixelBuffer else {
+            return pixelBuffer // Return original if scaling fails
+        }
+        
+        // Render scaled image to output buffer
+        ciContext.render(scaledImage, to: outputBuffer)
+        
+        return outputBuffer
+    }
+    
     override func broadcastFinished() {
         NSLog("🛑 Broadcast session ending")
         
-        // Mark broadcast as inactive to prevent reconnection attempts
         isBroadcastActive = false
         
-        // Stop system monitoring
+        // Stop all timers
         systemMonitorTimer?.invalidate()
         systemMonitorTimer = nil
+        settingsRefreshTimer?.invalidate()
+        settingsRefreshTimer = nil
         
-        // Properly close WebRTC connections
         cleanupWebRTCComponents()
         
-        // Finalize local recording if enabled
         if !disableLocalRecording {
             finalizeRecording { success in
                 NSLog("📹 Recording finalization: \(success ? "✅" : "❌")")
@@ -398,53 +472,22 @@ class SampleHandler: RPBroadcastSampleHandler {
         NSLog("🛑 Broadcast session cleanup completed")
     }
     
-    // MARK: - Proper Cleanup Methods
     private func cleanupWebRTCComponents() {
         NSLog("🧹 Cleaning up WebRTC components")
         
-        // Close peer connection
         peerConnection?.close()
         peerConnection = nil
         
-        // Disconnect signaling client properly
         signalingClient?.disconnect()
         signalingClient = nil
         
-        // Reset connection state
         isWebRTCConnected = false
         isSignalingConnected = false
         
-        // Clean up video components
         videoTrack = nil
         videoSource = nil
         
         NSLog("🧹 WebRTC cleanup completed")
-    }
-    
-    // MARK: - Quality Settings
-    private func applyQualitySettings(_ quality: String) {
-        switch quality {
-        case "low":
-            compressionQuality = 0.25
-            frameSkip = 3
-            downsizeFactor = 0.5
-            threshold = 720
-            currentBitrate = 400_000
-        case "high":
-            compressionQuality = 0.7
-            frameSkip = 1
-            downsizeFactor = 0.85
-            threshold = 1280
-            currentBitrate = 1_200_000
-        default:
-            compressionQuality = 0.5
-            frameSkip = 2
-            downsizeFactor = 0.7
-            threshold = 1080
-            currentBitrate = 800_000
-        }
-        
-        NSLog("🎛️ Applied quality settings - Quality: \(quality), Bitrate: \(currentBitrate), Skip: \(frameSkip)")
     }
     
     // MARK: - Local Recording Methods
@@ -488,14 +531,16 @@ class SampleHandler: RPBroadcastSampleHandler {
                 
                 let dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
                 
+                // Use custom bitrate in recording settings
                 let videoSettings: [String: Any] = [
                     AVVideoCodecKey: AVVideoCodecType.h264,
                     AVVideoWidthKey: dimensions.width,
                     AVVideoHeightKey: dimensions.height,
                     AVVideoCompressionPropertiesKey: [
-                        AVVideoAverageBitRateKey: currentBitrate,
+                        AVVideoAverageBitRateKey: Int(customBitrate),
                         AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-                        AVVideoMaxKeyFrameIntervalKey: 30
+                        AVVideoMaxKeyFrameIntervalKey: 30,
+                        AVVideoQualityKey: customImageQuality
                     ]
                 ]
                 
@@ -531,7 +576,7 @@ class SampleHandler: RPBroadcastSampleHandler {
                 assetWriter!.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
                 recordingStartTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
                 
-                NSLog("Started recording with dimensions: %dx%d", dimensions.width, dimensions.height)
+                NSLog("Started recording with custom settings - Bitrate: \(Int(customBitrate/1000))k, Quality: \(Int(customImageQuality * 100))%%")
             } catch {
                 NSLog("Failed to create asset writer: %@", error.localizedDescription)
                 return
@@ -596,21 +641,14 @@ extension SampleHandler: RTCPeerConnectionDelegate {
                 hasEstablishedConnection = true
                 isWebRTCConnected = true
                 connectionAttempts = 0
-                connectionQualityScore = 1.0
-                NSLog("✅ WebRTC connection established successfully - maintaining signaling connection")
-                
-                // CRITICAL: Do NOT close signaling connection here
-                // The signaling channel must remain open for the duration of the broadcast
+                NSLog("✅ WebRTC connection established with custom settings - Frame ratio: 1:\(Int(customFrameRatio)), Quality: \(Int(customImageQuality * 100))%%")
             }
         case .checking:
-            connectionQualityScore = max(connectionQualityScore - 0.1, 0.3)
             NSLog("🔍 ICE connection checking...")
         case .disconnected:
             isWebRTCConnected = false
-            connectionQualityScore = max(connectionQualityScore - 0.3, 0.1)
             NSLog("⚠️ WebRTC connection lost")
             
-            // Only attempt reconnection if broadcast is still active
             if isBroadcastActive {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
                     guard let self = self, self.isBroadcastActive else { return }
@@ -619,7 +657,6 @@ extension SampleHandler: RTCPeerConnectionDelegate {
             }
         case .failed:
             isWebRTCConnected = false
-            connectionQualityScore = 0.0
             NSLog("❌ WebRTC connection failed")
             
             if isBroadcastActive {
@@ -679,7 +716,7 @@ extension SampleHandler: RTCDataChannelDelegate {
 // MARK: - SignalingClientDelegate
 extension SampleHandler: SignalingClientDelegate {
     func signalingClientDidConnect(_ signalingClient: SignalingClient) {
-        NSLog("📡 Signaling connected - creating peer connection")
+        NSLog("📡 Signaling connected - creating peer connection with custom settings")
         
         guard isBroadcastActive else {
             NSLog("⚠️ Broadcast inactive, ignoring signaling connection")
@@ -700,7 +737,7 @@ extension SampleHandler: SignalingClientDelegate {
                 if let error = error {
                     NSLog("❌ Failed to set local description: \(error.localizedDescription)")
                 } else {
-                    NSLog("✅ Local description set - sending offer")
+                    NSLog("✅ Local description set with custom settings - sending offer")
                     self.signalingClient?.send(sessionDescription: sessionDescription)
                 }
             }
@@ -711,7 +748,6 @@ extension SampleHandler: SignalingClientDelegate {
         NSLog("📡❌ Signaling disconnected")
         isSignalingConnected = false
         
-        // Only attempt reconnection if broadcast is still active and we haven't established a connection yet
         if isBroadcastActive && connectionAttempts < maxConnectionAttempts {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
                 guard let self = self, self.isBroadcastActive else { return }
@@ -735,7 +771,7 @@ extension SampleHandler: SignalingClientDelegate {
                 NSLog("✅ Remote description set successfully")
                 
                 if sessionDescription.type == .answer {
-                    NSLog("📡 Answer received - WebRTC negotiation complete")
+                    NSLog("📡 Answer received - WebRTC negotiation complete with custom settings")
                 }
             }
         }
@@ -758,7 +794,6 @@ extension SampleHandler: SignalingClientDelegate {
         NSLog("📡❌ Signaling error: \(error.localizedDescription)")
         isSignalingConnected = false
         
-        // Only retry if broadcast is still active
         if isBroadcastActive {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
                 guard let self = self, self.isBroadcastActive else { return }

@@ -56,11 +56,6 @@ struct MainScreen: View {
                     GuideCard()
                 }
                 
-                // Quality selector button (before broadcast)
-                if !broadcastManager.isBroadcasting {
-                    qualityButton
-                }
-                
                 // Action buttons
                 actionButtonsSection
                 
