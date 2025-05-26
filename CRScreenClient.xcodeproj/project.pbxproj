@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		710040D32DE4B4CE005CC774 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 710040D22DE4B4CE005CC774 /* WebRTC */; };
 		71A128752DB218270060F9A9 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71A128742DB218270060F9A9 /* ReplayKit.framework */; };
 		71A1287F2DB218270060F9A9 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71A128742DB218270060F9A9 /* ReplayKit.framework */; };
 		71A128812DB218270060F9A9 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71A128802DB218270060F9A9 /* UIKit.framework */; };
@@ -82,6 +83,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				"Core/Extensions/Color+Extensions.swift",
+				Core/WebRTC/SignalingClient.swift,
 				CRShared.swift,
 			);
 			target = 71A128712DB218260060F9A9 /* CRScreenClientBroadcast */;
@@ -90,6 +92,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				"Core/Extensions/Color+Extensions.swift",
+				Core/WebRTC/SignalingClient.swift,
 				CRShared.swift,
 			);
 			target = 71A1287D2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */;
@@ -131,6 +134,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				71D454CD2DBB5085005FA168 /* AVFoundation.framework in Frameworks */,
+				710040D32DE4B4CE005CC774 /* WebRTC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -207,8 +211,6 @@
 				71A128592DB216A40060F9A9 /* CRScreenClient */,
 			);
 			name = CRScreenClient;
-			packageProductDependencies = (
-			);
 			productName = CRScreenClient;
 			productReference = 71A128572DB216A40060F9A9 /* Royal Trainer.app */;
 			productType = "com.apple.product-type.application";
@@ -229,8 +231,6 @@
 				71A128762DB218270060F9A9 /* CRScreenClientBroadcast */,
 			);
 			name = CRScreenClientBroadcast;
-			packageProductDependencies = (
-			);
 			productName = CRScreenClientBroadcast;
 			productReference = 71A128722DB218260060F9A9 /* Royal Trainer Broadcast.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -251,8 +251,6 @@
 				71A128822DB218270060F9A9 /* CRScreenClientBroadcastSetupUI */,
 			);
 			name = CRScreenClientBroadcastSetupUI;
-			packageProductDependencies = (
-			);
 			productName = CRScreenClientBroadcastSetupUI;
 			productReference = 71A1287E2DB218270060F9A9 /* CRScreenClientBroadcastSetupUI.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -287,6 +285,9 @@
 			);
 			mainGroup = 71A1284E2DB216A40060F9A9;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				710040D12DE4B4CE005CC774 /* XCRemoteSwiftPackageReference "WebRTC" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 71A128582DB216A40060F9A9 /* Products */;
 			projectDirPath = "";
@@ -698,6 +699,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		710040D12DE4B4CE005CC774 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stasel/WebRTC.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 136.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		710040D22DE4B4CE005CC774 /* WebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 710040D12DE4B4CE005CC774 /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 71A1284F2DB216A40060F9A9 /* Project object */;
 }

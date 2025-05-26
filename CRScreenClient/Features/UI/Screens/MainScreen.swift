@@ -23,11 +23,11 @@ struct MainScreen: View {
     }
     
     // Get app version and build number from Info.plist
-     private var appVersion: String {
-         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1"
-         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-         return "v\(version) (\(build))"
-     }
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "v\(version) (\(build))"
+    }
     
     @Environment(\.scenePhase) private var phase
     
@@ -42,87 +42,10 @@ struct MainScreen: View {
             
             VStack(spacing: 20) {
                 // Top bar with settings button and debug button
-                HStack {
-                    Spacer()
-                    
-                    // Settings button in Clash Royale style
-                    Button(action: {
-                        showSettings = true
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "gearshape.fill")
-                                .font(.system(size: 20))
-                            Text("Settings")
-                                .font(.system(size: 16, weight: .bold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 20)
-                        .background(
-                            Capsule()
-                                .fill(Color.crNavy.opacity(0.8))
-                                .overlay(
-                                    Capsule()
-                                        .strokeBorder(
-                                            LinearGradient(
-                                                colors: [.crGold, .crGold.opacity(0.7)],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            ),
-                                            lineWidth: 2
-                                        )
-                                )
-                                .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 3)
-                        )
-                    }
-                    .buttonStyle(ClashRoyaleButtonStyle())
-                    
-                    // Add some space between buttons
-                    if debugSettings.debugModeEnabled {
-                        Spacer().frame(width: 8)
-                        
-                        // Debug menu button
-                        Button(action: {
-                            showDebugMenu = true
-                        }) {
-                            Image(systemName: "ladybug.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(.red.opacity(0.8))
-                                .padding(8)
-                                .background(
-                                    Circle()
-                                        .fill(Color.crNavy.opacity(0.7))
-                                        .overlay(
-                                            Circle()
-                                                .strokeBorder(Color.red.opacity(0.5), lineWidth: 1.5)
-                                        )
-                                )
-                        }
-                    }
-                    
-                    Spacer()
-                }
-                .padding(.top, 8)
+                topBarSection
                 
-                // Player View - only show if not disabled in debug settings
-                if broadcastManager.isBroadcasting && !debugSettings.disableVideoPreview {
-                    videoPlayerSection
-                } else if broadcastManager.isBroadcasting && debugSettings.disableVideoPreview {
-                    // Show placeholder when video is disabled
-                    Text("Video Preview Disabled")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 20)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.black.opacity(0.3))
-                        )
-                        .padding(.top, 10)
-                } else {
-                    // When not broadcasting, add some space
-                    Spacer().frame(height: 20)
-                }
+                // Video player section - demo video or broadcast status
+                videoPlayerSection
                 
                 // Status indicators
                 statusSection
@@ -147,10 +70,9 @@ struct MainScreen: View {
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.bottom, 8)
                     .onTapGesture(count: 5) {
-                            // Show debug menu on 5 taps of the version number
-                            debugSettings.debugModeEnabled = true
-                            showDebugMenu = true
-                        }
+                        debugSettings.debugModeEnabled = true
+                        showDebugMenu = true
+                    }
             }
             .padding(.horizontal)
             .sheet(isPresented: $showQualitySettings) {
@@ -173,40 +95,16 @@ struct MainScreen: View {
             
             // Toast notification for saved broadcast
             if showBroadcastSavedToast {
-                VStack {
-                    Spacer()
-                    
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        
-                        Text("Broadcast saved")
-                            .foregroundColor(.white)
-                            .font(.system(size: 16, weight: .medium))
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(
-                        Capsule()
-                            .fill(Color.black.opacity(0.8))
-                            .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    
-                    .padding(.bottom, 20)
-                }
-                .zIndex(100)
-                .transition(.opacity)
+                broadcastSavedToast
             }
         }
         .gesture(
-    // Secret triple-tap gesture to enable debug mode
-    TapGesture(count: 3)
-        .onEnded {
-            debugSettings.debugModeEnabled = true
-            showDebugMenu = true
-        }
-)
+            TapGesture(count: 3)
+                .onEnded {
+                    debugSettings.debugModeEnabled = true
+                    showDebugMenu = true
+                }
+        )
         .background(
             BroadcastPickerHelper(
                 extensionID: Constants.Broadcast.extensionID,
@@ -221,90 +119,137 @@ struct MainScreen: View {
         .onChange(of: broadcastManager.isBroadcasting) { _, isNowBroadcasting in
             handleBroadcastStateChange(isNowBroadcasting)
         }
-        .onChange(of: broadcastManager.isBroadcasting) { _, isNowBroadcasting in
-            if Constants.FeatureFlags.enableDebugLogging {
-                print("Broadcast state changed: \(isNowBroadcasting ? "started" : "stopped")")
-            }
-            
-            if isNowBroadcasting {
-                shouldSetupVideo = true
-                isVideoPrepared = false
-            } else {
-                resetVideoState()
-                
-                // When broadcasting stops, force a refresh after a delay to ensure recording is processed
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    if Constants.FeatureFlags.enableDebugLogging {
-                        print("Refreshing storage manager after broadcast stopped")
-                    }
-                    broadcastManager.storageManager.refreshBroadcasts()
-                }
-            }
-        }
-        // Add a listener for the last recording URL
         .onChange(of: broadcastManager.lastRecordingURL) { _, url in
-            if let url = url {
-                // Show a toast notification that a recording was saved
-                if Constants.FeatureFlags.enableDebugLogging {
-                    print("New recording available: \(url.lastPathComponent)")
-                }
-                
-                // Show toast notification
-                withAnimation {
-                    showBroadcastSavedToast = true
-                }
-                
-                // Hide toast after 3 seconds
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    withAnimation {
-                        showBroadcastSavedToast = false
-                    }
-                }
-            }
+            handleNewRecording(url)
         }
     }
     
     // MARK: - View Components
     
-    private var videoPlayerSection: some View {
-        VStack(spacing: 0) {
-            if isVideoPrepared {
-                PlayerView(player: player) { layer in
-                    if Constants.FeatureFlags.enablePictureInPicture {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            pipManager.setup(with: layer)
-                        }
-                    }
+    private var topBarSection: some View {
+        HStack {
+            Spacer()
+            
+            // Settings button
+            Button(action: { showSettings = true }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 20))
+                    Text("Settings")
+                        .font(.system(size: 16, weight: .bold))
                 }
+                .foregroundColor(.white)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 20)
+                .background(
+                    Capsule()
+                        .fill(Color.crNavy.opacity(0.8))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [.crGold, .crGold.opacity(0.7)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 2
+                                )
+                        )
+                        .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 3)
+                )
+            }
+            .buttonStyle(ClashRoyaleButtonStyle())
+            
+            // Debug menu button
+            if debugSettings.debugModeEnabled {
+                Spacer().frame(width: 8)
+                
+                Button(action: { showDebugMenu = true }) {
+                    Image(systemName: "ladybug.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.red.opacity(0.8))
+                        .padding(8)
+                        .background(
+                            Circle()
+                                .fill(Color.crNavy.opacity(0.7))
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(Color.red.opacity(0.5), lineWidth: 1.5)
+                                )
+                        )
+                }
+            }
+            
+            Spacer()
+        }
+        .padding(.top, 8)
+    }
+    
+    private var videoPlayerSection: some View {
+        VStack(spacing: 8) {
+            if broadcastManager.isBroadcasting && !debugSettings.disableVideoPreview {
+                // Show broadcast status when this device is broadcasting
+                broadcastStatusView
+                
+            } else if broadcastManager.isBroadcasting && debugSettings.disableVideoPreview {
+                // Show placeholder when video is disabled
+                Text("Video Preview Disabled")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.black.opacity(0.3))
+                    )
+                    .padding(.top, 10)
+                    
+            } else {
+                // When not broadcasting, add some space
+                Spacer().frame(height: 20)
+            }
+        }
+    }
+    
+    private var broadcastStatusView: some View {
+        VStack(spacing: 12) {
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [.crBlue.opacity(0.3), .crNavy.opacity(0.5)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .frame(height: 200)
                 .cornerRadius(Constants.UI.cornerRadius)
+                .overlay(
+                    VStack {
+                        Image(systemName: "dot.radiowaves.left.and.right")
+                            .font(.system(size: 48))
+                            .foregroundColor(.crGold)
+                        
+                        Text("Broadcasting Active")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        Text("Screen is being streamed via WebRTC")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white.opacity(0.8))
+                        
+                        Text("Session: \(broadcastManager.code)")
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundColor(.crGold)
+                            .padding(.top, 8)
+                    }
+                )
                 .overlay(
                     RoundedRectangle(cornerRadius: Constants.UI.cornerRadius)
                         .stroke(Color.crGold, lineWidth: 2)
                 )
                 .padding(.horizontal)
-            } else {
-                // Loading placeholder
-                Rectangle()
-                    .fill(Color.black.opacity(0.8))
-                    .frame(height: 200)
-                    .cornerRadius(Constants.UI.cornerRadius)
-                    .overlay(
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Constants.UI.cornerRadius)
-                            .stroke(Color.crGold, lineWidth: 2)
-                    )
-                    .padding(.horizontal)
-            }
             
-            // Quality indicator during broadcast
-            if broadcastManager.isBroadcasting {
-                qualityIndicator
-                    .padding(.top, 6)
-            }
+            qualityIndicator
         }
     }
     
@@ -345,6 +290,11 @@ struct MainScreen: View {
                 CapsuleLabel(
                     text: BroadcastService.shared.formatTimeString(broadcastManager.elapsed),
                     color: .crGold.opacity(0.9)
+                )
+                
+                CapsuleLabel(
+                    text: "WebRTC",
+                    color: .green
                 )
             }
             
@@ -452,10 +402,9 @@ struct MainScreen: View {
             }
             .buttonStyle(.plain)
             
-            // Recent Broadcasts button
+            // Recent Broadcasts button (only when not broadcasting)
             if !broadcastManager.isBroadcasting {
                 Button(action: {
-                    // Force storage manager to refresh before showing screen
                     broadcastManager.storageManager.refreshBroadcasts()
                     showRecentBroadcasts = true
                 }) {
@@ -487,39 +436,39 @@ struct MainScreen: View {
                 }
                 .buttonStyle(ClashRoyaleButtonStyle())
             }
-            
-            // PiP Button - only shown when broadcasting and video is prepared
-            if Constants.FeatureFlags.enablePictureInPicture &&
-               broadcastManager.isBroadcasting &&
-               isVideoPrepared &&
-               !debugSettings.disableVideoPreview {
-                Button(action: {
-                    pipManager.togglePiP()
-                }) {
-                    Label(
-                        pipManager.isPiPActive ? "Exit Picture-in-Picture" : "Enter Picture-in-Picture",
-                        systemImage: pipManager.isPiPActive ? "pip.exit" : "pip.enter"
-                    )
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(
-                        Capsule()
-                            .fill(Color.crPurple)
-                            .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
-                    )
-                }
-                .disabled(!pipManager.isPiPPossible)
-                .opacity(pipManager.isPiPPossible ? 1.0 : 0.5)
-                .padding(.top, 10)
-            }
         }
+    }
+    
+    private var broadcastSavedToast: some View {
+        VStack {
+            Spacer()
+            
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                
+                Text("Broadcast saved")
+                    .foregroundColor(.white)
+                    .font(.system(size: 16, weight: .medium))
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(
+                Capsule()
+                    .fill(Color.black.opacity(0.8))
+                    .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
+            )
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .padding(.bottom, 20)
+        }
+        .zIndex(100)
+        .transition(.opacity)
     }
     
     // MARK: - Event Handlers
     
     private func handleAppear() {
+        // Check initial state
         if broadcastManager.isBroadcasting && !isVideoPrepared && !debugSettings.disableVideoPreview {
             shouldSetupVideo = true
         }
@@ -545,7 +494,7 @@ struct MainScreen: View {
         } else {
             resetVideoState()
             
-            // When broadcasting stops, force refresh the broadcasts list after a delay
+            // When broadcasting stops, refresh the broadcasts list after a delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                 if Constants.FeatureFlags.enableDebugLogging {
                     print("Force refreshing broadcasts list after broadcast ended")
@@ -555,10 +504,29 @@ struct MainScreen: View {
         }
     }
     
+    private func handleNewRecording(_ url: URL?) {
+        if let url = url {
+            if Constants.FeatureFlags.enableDebugLogging {
+                print("New recording available: \(url.lastPathComponent)")
+            }
+            
+            // Show toast notification
+            withAnimation {
+                showBroadcastSavedToast = true
+            }
+            
+            // Hide toast after 3 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                withAnimation {
+                    showBroadcastSavedToast = false
+                }
+            }
+        }
+    }
+    
     private func toggleBroadcast() {
-        // Pass the custom server URL if using custom server in debug settings
+        // Pass debug settings to broadcast extension
         if debugSettings.useCustomServer && !debugSettings.customServerURL.isEmpty {
-            // Prepare server URL by combining base url with session code
             UserDefaults(suiteName: Constants.Broadcast.groupID)?.set(
                 debugSettings.useCustomServer,
                 forKey: "debug_useCustomServer"
@@ -569,7 +537,6 @@ struct MainScreen: View {
             )
         }
         
-        // Pass the local recording flag to the broadcast extension
         UserDefaults(suiteName: Constants.Broadcast.groupID)?.set(
             debugSettings.disableLocalRecording,
             forKey: "debug_disableLocalRecording"
