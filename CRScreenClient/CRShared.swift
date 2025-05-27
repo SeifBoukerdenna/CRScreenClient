@@ -6,11 +6,11 @@ enum Constants {
         static let demoVideo = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
         
         // Legacy HTTP endpoints (deprecated)
-        static let broadcastServer = "http://10.20.5.212:8080/upload/"
+        static let broadcastServer = "http://192.168.2.12:8080/upload/"
         
         // WebRTC signaling server endpoints
-        static let webRTCSignalingServer = "ws://10.20.5.212:8080/ws"
-        static let webRTCSignalingServerSecure = "wss://10.20.5.212:8080/ws"
+        static let webRTCSignalingServer = "ws://192.168.2.12:8080/ws"
+        static let webRTCSignalingServerSecure = "wss://192.168.2.12:8080/ws"
         
         // STUN/TURN servers for WebRTC
         static let stunServers = [

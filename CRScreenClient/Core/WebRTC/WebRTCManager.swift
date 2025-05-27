@@ -165,7 +165,7 @@ class WebRTCManager: NSObject, ObservableObject {
             }
             return URL(string: "\(baseURL)/ws/\(sessionCode)")!
         } else {
-            return URL(string: "ws://10.20.5.212:8080/ws/\(sessionCode)")!
+            return URL(string: "ws://192.168.2.12:8080/ws/\(sessionCode)")!
         }
     }
     
