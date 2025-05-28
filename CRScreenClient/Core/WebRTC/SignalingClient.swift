@@ -44,6 +44,11 @@ class SignalingClient: NSObject {
         super.init()
         
         setupURLSession()
+        
+        if Constants.FeatureFlags.enableDebugLogging {
+            print("SignalingClient: Initialized with URL: \(url.absoluteString)")
+            print("SignalingClient: Session code: \(sessionCode)")
+        }
     }
     
     deinit {

@@ -155,26 +155,22 @@ class WebRTCManager: NSObject, ObservableObject {
     }
     
     private func getSignalingURL(for sessionCode: String) -> URL {
-        if debugSettings.useCustomServer && !debugSettings.customServerURL.isEmpty {
-            var baseURL = debugSettings.customServerURL
-            if !baseURL.hasPrefix("ws://") && !baseURL.hasPrefix("wss://") {
-                baseURL = "ws://" + baseURL
-            }
-            if baseURL.hasSuffix("/") {
-                baseURL = String(baseURL.dropLast())
-            }
-            return URL(string: "\(baseURL)/ws/\(sessionCode)")!
-        } else {
-            return URL(string: "ws://192.168.2.12:8080/ws/\(sessionCode)")!
+        // Use the dynamic URL from Constants which checks debug settings
+        let baseURL = Constants.URLs.webRTCSignalingServer
+        let fullURL = "\(baseURL)/\(sessionCode)"
+        
+        if Constants.FeatureFlags.enableDebugLogging {
+            print("WebRTCManager: Using signaling URL: \(fullURL)")
+            print("Debug settings - Custom server enabled: \(debugSettings.useCustomServer)")
+            print("Debug settings - Custom URL: \(debugSettings.customServerURL)")
         }
+        
+        return URL(string: fullURL)!
     }
     
     private func createPeerConnection() {
         let config = RTCConfiguration()
-        config.iceServers = [
-            RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"]),
-            RTCIceServer(urlStrings: ["stun:stun1.l.google.com:19302"])
-        ]
+        config.iceServers = Constants.URLs.stunServers.map { RTCIceServer(urlStrings: [$0]) }
         config.bundlePolicy = .balanced
         config.rtcpMuxPolicy = .require
         config.tcpCandidatePolicy = .disabled
@@ -359,7 +355,7 @@ class FrameCountingVideoRenderer: NSObject, RTCVideoRenderer {
     
     init(actualRenderer: RTCVideoRenderer, webRTCManager: WebRTCManager) {
         self.actualRenderer = actualRenderer
-        self.webRTCManager  = webRTCManager
+        self.webRTCManager = webRTCManager
         super.init()
     }
     
@@ -369,7 +365,6 @@ class FrameCountingVideoRenderer: NSObject, RTCVideoRenderer {
     
     func renderFrame(_ frame: RTCVideoFrame?) {
         if frame != nil {
-            // ← use the public mutating helper
             webRTCManager?.incrementFrameCount()
         }
         actualRenderer.renderFrame(frame)

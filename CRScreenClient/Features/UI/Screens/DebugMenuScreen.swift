@@ -8,11 +8,15 @@ struct DebugMenuScreen: View {
     
     // For server URL input field
     @State private var serverURL: String
+    @State private var customPort: String
+    @State private var isURLValid = true
+    @State private var urlValidationMessage = ""
     
     init(debugSettings: DebugSettings) {
         self.debugSettings = debugSettings
-        // Initialize state with current value
+        // Initialize state with current values
         _serverURL = State(initialValue: debugSettings.customServerURL)
+        _customPort = State(initialValue: debugSettings.customPort)
     }
     
     var body: some View {
@@ -41,6 +45,7 @@ struct DebugMenuScreen: View {
                     
                     // Settings Sections
                     serverSettingsSection
+                    connectionSettingsSection
                     recordingSettingsSection
                     debugFeatureTogglesSection
                     
@@ -70,6 +75,8 @@ struct DebugMenuScreen: View {
                         Button("Reset", role: .destructive) {
                             debugSettings.resetToDefaults()
                             serverURL = debugSettings.customServerURL
+                            customPort = debugSettings.customPort
+                            validateURL()
                         }
                     } message: {
                         Text("Are you sure you want to reset all debug settings to their default values?")
@@ -112,6 +119,9 @@ struct DebugMenuScreen: View {
                 .foregroundColor(.white)
             }
         }
+        .onAppear {
+            validateURL()
+        }
     }
     
     // MARK: - Section Views
@@ -119,7 +129,7 @@ struct DebugMenuScreen: View {
     private var serverSettingsSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Section Header
-            sectionHeader(icon: "network", title: "Server Settings")
+            sectionHeader(icon: "network", title: "Server Configuration")
             
             // Settings Box with Clash Royale styling
             VStack(spacing: 16) {
@@ -130,7 +140,7 @@ struct DebugMenuScreen: View {
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
                         
-                        Text("When enabled, broadcasts will be sent to the custom URL below")
+                        Text("Enable this to connect to your own WebRTC signaling server instead of the default")
                             .font(.system(size: 14))
                             .foregroundColor(.white.opacity(0.7))
                     }
@@ -143,7 +153,53 @@ struct DebugMenuScreen: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
                     
-                    TextField("http://192.168.1.100:8080/upload/", text: $serverURL)
+                    TextField("192.168.1.100 or myserver.com", text: $serverURL)
+                        .font(.system(size: 16))
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.black.opacity(0.3))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(
+                                    debugSettings.useCustomServer ?
+                                    (isURLValid ? Color.crGold.opacity(0.7) : Color.red.opacity(0.7)) :
+                                    Color.gray.opacity(0.3),
+                                    lineWidth: 1
+                                )
+                        )
+                        .foregroundColor(.white)
+                        .disabled(!debugSettings.useCustomServer)
+                        .opacity(debugSettings.useCustomServer ? 1.0 : 0.6)
+                        .autocapitalization(.none)
+                        .keyboardType(.URL)
+                        .disableAutocorrection(true)
+                        .onChange(of: serverURL) { newValue in
+                            debugSettings.customServerURL = newValue
+                            validateURL()
+                        }
+                    
+                    // URL validation message
+                    if debugSettings.useCustomServer && !urlValidationMessage.isEmpty {
+                        HStack {
+                            Image(systemName: isURLValid ? "checkmark.circle" : "exclamationmark.triangle")
+                                .foregroundColor(isURLValid ? .green : .orange)
+                            Text(urlValidationMessage)
+                                .font(.system(size: 13))
+                                .foregroundColor(isURLValid ? .green : .orange)
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+                
+                // Port configuration
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Custom Port (optional):")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    TextField("8080", text: $customPort)
                         .font(.system(size: 16))
                         .padding(12)
                         .background(
@@ -157,30 +213,80 @@ struct DebugMenuScreen: View {
                         .foregroundColor(.white)
                         .disabled(!debugSettings.useCustomServer)
                         .opacity(debugSettings.useCustomServer ? 1.0 : 0.6)
-                        .autocapitalization(.none)
-                        .keyboardType(.URL)
-                        .disableAutocorrection(true)
-                        .onChange(of: serverURL) { newValue in
-                            // Update settings when typing stops
-                            debugSettings.customServerURL = newValue
+                        .keyboardType(.numberPad)
+                        .onChange(of: customPort) { newValue in
+                            debugSettings.customPort = newValue
                         }
                 }
                 
-                // Display current effective URL
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Active Server:")
+                // Display current effective URLs
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Active Configuration:")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.white.opacity(0.8))
                     
-                    Text(debugSettings.effectiveServerURL)
-                        .font(.system(size: 14, weight: .medium).monospaced())
-                        .foregroundColor(.crGold)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.black.opacity(0.2))
-                        )
+                    VStack(alignment: .leading, spacing: 4) {
+                        urlDisplayRow("WebRTC:", debugSettings.effectiveWebRTCURL)
+                        urlDisplayRow("HTTP:", debugSettings.effectiveServerURL)
+                    }
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.black.opacity(0.2))
+                    )
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.crNavy.opacity(0.8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .strokeBorder(Color.crGold, lineWidth: 2)
+                    )
+            )
+            .padding(.bottom, 10)
+        }
+    }
+    
+    private var connectionSettingsSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Section Header
+            sectionHeader(icon: "wifi", title: "Connection Settings")
+            
+            // Settings Box
+            VStack(spacing: 16) {
+                // Secure connection preference
+                Toggle(isOn: $debugSettings.preferSecureConnection) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Prefer Secure Connection")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        Text("Use WSS (secure WebSocket) and HTTPS when possible")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+                .toggleStyle(SwitchToggleStyle(tint: .crGold))
+                
+                // Connection status info
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Connection Information:")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        connectionInfoRow("Protocol:", debugSettings.preferSecureConnection ? "Secure (WSS/HTTPS)" : "Standard (WS/HTTP)")
+                        connectionInfoRow("Port:", customPort.isEmpty ? "Default (8080)" : customPort)
+                        connectionInfoRow("Status:", debugSettings.useCustomServer ? "Custom Server" : "Default Server")
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.black.opacity(0.2))
+                    )
                 }
             }
             .padding(16)
@@ -210,7 +316,7 @@ struct DebugMenuScreen: View {
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
                         
-                        Text("Hides the video player during broadcasting")
+                        Text("Hides the video player during broadcasting to save resources")
                             .font(.system(size: 14))
                             .foregroundColor(.white.opacity(0.7))
                     }
@@ -258,20 +364,25 @@ struct DebugMenuScreen: View {
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
                         
-                        Text("Enables additional debug logging and features")
+                        Text("Enables additional debug logging and features throughout the app")
                             .font(.system(size: 14))
                             .foregroundColor(.white.opacity(0.7))
                     }
                 }
                 .toggleStyle(SwitchToggleStyle(tint: .crGold))
                 
-                // Information about current build
-                HStack {
+                // Information about current build and configuration
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("System Information:")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                    
                     VStack(alignment: .leading, spacing: 8) {
                         statusRow(title: "Build Type:", value: "Debug", icon: "hammer.fill")
                         statusRow(title: "App Version:", value: getAppVersionString(), icon: "app.badge.fill")
                         statusRow(title: "Device:", value: UIDevice.current.model, icon: "iphone")
                         statusRow(title: "iOS Version:", value: UIDevice.current.systemVersion, icon: "apple.logo")
+                        statusRow(title: "WebRTC:", value: Constants.FeatureFlags.enableWebRTC ? "Enabled" : "Disabled", icon: "network")
                     }
                 }
                 .padding(.vertical, 10)
@@ -280,6 +391,30 @@ struct DebugMenuScreen: View {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color.black.opacity(0.2))
                 )
+                
+                // Server configuration summary
+                if debugSettings.debugModeEnabled {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Current Server Configuration:")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.crGold)
+                        
+                        let config = debugSettings.getServerConfiguration()
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(config.keys.sorted()), id: \.self) { key in
+                                if let value = config[key] {
+                                    configRow(key: key, value: "\(value)")
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.black.opacity(0.2))
+                    )
+                }
             }
             .padding(16)
             .background(
@@ -313,6 +448,34 @@ struct DebugMenuScreen: View {
         .padding(.horizontal, 20)
     }
     
+    private func urlDisplayRow(_ title: String, _ value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.white.opacity(0.8))
+                .frame(width: 60, alignment: .leading)
+            
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.crGold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    
+    private func connectionInfoRow(_ title: String, _ value: String) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.white.opacity(0.9))
+                .frame(width: 80, alignment: .leading)
+            
+            Text(value)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    
     private func statusRow(title: String, value: String, icon: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
@@ -332,7 +495,27 @@ struct DebugMenuScreen: View {
         }
     }
     
+    private func configRow(key: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(key.replacingOccurrences(of: "effective", with: "").capitalized + ":")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white.opacity(0.7))
+                .frame(width: 100, alignment: .leading)
+            
+            Text(value)
+                .font(.system(size: 12))
+                .foregroundColor(.crGold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    
     // MARK: - Helper Methods
+    
+    private func validateURL() {
+        let validation = debugSettings.validateServerURL()
+        isURLValid = validation.isValid
+        urlValidationMessage = validation.message
+    }
     
     private func getAppVersionString() -> String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"

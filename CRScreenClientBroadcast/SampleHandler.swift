@@ -21,10 +21,10 @@ class SampleHandler: RPBroadcastSampleHandler {
     private let kQualityKey = "streamQuality"
     
     // MARK: - Custom Settings from User Interface
-    private var customFrameRatio: Double = 1.0        // Frame processing ratio (1:1, 1:2, etc.)
-    private var customImageQuality: Double = 0.6      // Image compression quality (0.1-1.0)
-    private var customBitrate: Double = 800000        // Custom bitrate
-    private var customResolutionScale: Double = 0.8   // Resolution scaling factor
+    private var customFrameRatio: Double = 1.0
+    private var customImageQuality: Double = 0.6
+    private var customBitrate: Double = 800000
+    private var customResolutionScale: Double = 0.8
     
     // MARK: - Video Processing Variables
     private var compressionQuality: CGFloat = 0.5
@@ -214,7 +214,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         signalingClient?.delegate = self
         signalingClient?.connect()
         
-        NSLog("📡 WebRTC components initialized with custom settings")
+        NSLog("📡 WebRTC components initialized with custom settings - connecting to: \(signalingURL.absoluteString)")
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
             guard let self = self, self.isBroadcastActive else { return }
@@ -243,22 +243,21 @@ class SampleHandler: RPBroadcastSampleHandler {
     }
     
     private func getSignalingURL() -> URL {
-        let defaults = UserDefaults(suiteName: groupID)
-        let useCustomServer = defaults?.bool(forKey: "debug_useCustomServer") ?? false
-        let customServerURL = defaults?.string(forKey: "debug_customServerURL") ?? ""
+        // Use the dynamic URL from Constants which checks debug settings
+        let baseURL = Constants.URLs.webRTCSignalingServer
+        let fullURL = "\(baseURL)/\(sessionCode)"
         
-        if useCustomServer && !customServerURL.isEmpty {
-            var baseURL = customServerURL
-            if !baseURL.hasPrefix("ws://") && !baseURL.hasPrefix("wss://") {
-                baseURL = "ws://" + baseURL
-            }
-            if baseURL.hasSuffix("/") {
-                baseURL = String(baseURL.dropLast())
-            }
-            return URL(string: "\(baseURL)/ws/\(sessionCode)")!
-        } else {
-            return URL(string: "ws://192.168.2.12:8080/ws/\(sessionCode)")!
+        if Constants.FeatureFlags.enableDebugLogging {
+            let defaults = UserDefaults(suiteName: groupID)
+            let useCustomServer = defaults?.bool(forKey: "debug_useCustomServer") ?? false
+            let customServerURL = defaults?.string(forKey: "debug_customServerURL") ?? ""
+            
+            print("SampleHandler: WebRTC signaling URL: \(fullURL)")
+            print("SampleHandler: Custom server enabled: \(useCustomServer)")
+            print("SampleHandler: Custom URL: \(customServerURL)")
         }
+        
+        return URL(string: fullURL)!
     }
     
     private func createPeerConnection() {
@@ -268,10 +267,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         }
         
         let config = RTCConfiguration()
-        config.iceServers = [
-            RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"]),
-            RTCIceServer(urlStrings: ["stun:stun1.l.google.com:19302"])
-        ]
+        config.iceServers = Constants.URLs.stunServers.map { RTCIceServer(urlStrings: [$0]) }
         config.bundlePolicy = .balanced
         config.rtcpMuxPolicy = .require
         config.tcpCandidatePolicy = .disabled
@@ -423,8 +419,8 @@ class SampleHandler: RPBroadcastSampleHandler {
         
         // Create output pixel buffer
         let attrs = [
-            kCVPixelBufferCGImageCompatibilityKey: kCFBooleanTrue,
-            kCVPixelBufferCGBitmapContextCompatibilityKey: kCFBooleanTrue,
+            kCVPixelBufferCGImageCompatibilityKey: kCFBooleanTrue!,
+            kCVPixelBufferCGBitmapContextCompatibilityKey: kCFBooleanTrue!,
             kCVPixelBufferWidthKey: scaledWidth,
             kCVPixelBufferHeightKey: scaledHeight
         ] as CFDictionary

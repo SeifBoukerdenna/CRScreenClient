@@ -5,14 +5,73 @@ enum Constants {
     enum URLs {
         static let demoVideo = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
         
-        // Legacy HTTP endpoints (deprecated)
-        static let broadcastServer = "http://192.168.2.12:8080/upload/"
+        // Default server URLs (used as fallbacks when no custom URL is set)
+        private static let defaultWebRTCSignalingServer = "ws://192.168.2.12:8080/ws"
+        private static let defaultWebRTCSignalingServerSecure = "wss://192.168.2.12:8080/ws"
+        private static let defaultBroadcastServer = "http://192.168.2.12:8080/upload/"
         
-        // WebRTC signaling server endpoints
-        static let webRTCSignalingServer = "ws://192.168.2.12:8080/ws"
-        static let webRTCSignalingServerSecure = "wss://192.168.2.12:8080/ws"
+        // Dynamic server URL getters that check debug settings
+        static var webRTCSignalingServer: String {
+            let defaults = UserDefaults(suiteName: AppGroup.identifier)
+            let useCustomServer = defaults?.bool(forKey: "debug_useCustomServer") ?? false
+            let customServerURL = defaults?.string(forKey: "debug_customServerURL") ?? ""
+            
+            if useCustomServer && !customServerURL.isEmpty {
+                var baseURL = customServerURL
+                if !baseURL.hasPrefix("ws://") && !baseURL.hasPrefix("wss://") {
+                    baseURL = "ws://" + baseURL
+                }
+                if baseURL.hasSuffix("/") {
+                    baseURL = String(baseURL.dropLast())
+                }
+                return "\(baseURL)/ws"
+            }
+            return defaultWebRTCSignalingServer
+        }
         
-        // STUN/TURN servers for WebRTC
+        static var webRTCSignalingServerSecure: String {
+            let defaults = UserDefaults(suiteName: AppGroup.identifier)
+            let useCustomServer = defaults?.bool(forKey: "debug_useCustomServer") ?? false
+            let customServerURL = defaults?.string(forKey: "debug_customServerURL") ?? ""
+            
+            if useCustomServer && !customServerURL.isEmpty {
+                var baseURL = customServerURL
+                if !baseURL.hasPrefix("wss://") && !baseURL.hasPrefix("ws://") {
+                    baseURL = "wss://" + baseURL
+                }
+                if baseURL.hasSuffix("/") {
+                    baseURL = String(baseURL.dropLast())
+                }
+                return "\(baseURL)/ws"
+            }
+            return defaultWebRTCSignalingServerSecure
+        }
+        
+        static var broadcastServer: String {
+            let defaults = UserDefaults(suiteName: AppGroup.identifier)
+            let useCustomServer = defaults?.bool(forKey: "debug_useCustomServer") ?? false
+            let customServerURL = defaults?.string(forKey: "debug_customServerURL") ?? ""
+            
+            if useCustomServer && !customServerURL.isEmpty {
+                var baseURL = customServerURL
+                if !baseURL.hasPrefix("http://") && !baseURL.hasPrefix("https://") {
+                    baseURL = "http://" + baseURL
+                }
+                if !baseURL.hasSuffix("/") {
+                    baseURL += "/"
+                }
+                return "\(baseURL)upload/"
+            }
+            return defaultBroadcastServer
+        }
+        
+        // Utility method to get WebRTC signaling URL for a specific session
+        static func webRTCSignalingURL(for sessionCode: String) -> URL {
+            let baseURL = webRTCSignalingServer
+            return URL(string: "\(baseURL)/\(sessionCode)")!
+        }
+        
+        // STUN/TURN servers for WebRTC (these remain static)
         static let stunServers = [
             "stun:stun.l.google.com:19302",
             "stun:stun1.l.google.com:19302",
@@ -41,25 +100,25 @@ enum Constants {
     
     enum WebRTC {
         // Conservative WebRTC configuration constants
-        static let maxReconnectAttempts = 3 // Reduced from 5
-        static let reconnectDelay: TimeInterval = 5.0 // Increased from 3.0
-        static let connectionTimeout: TimeInterval = 8.0 // Reduced from 10.0
-        static let signalingTimeout: TimeInterval = 20.0 // Reduced from 30.0
+        static let maxReconnectAttempts = 3
+        static let reconnectDelay: TimeInterval = 5.0
+        static let connectionTimeout: TimeInterval = 8.0
+        static let signalingTimeout: TimeInterval = 20.0
         
         // Conservative video encoding parameters
         enum VideoEncoding {
-            static let maxBitrate = 1_200_000 // Reduced from 2 Mbps
-            static let minBitrate = 300_000   // 300 Kbps
-            static let startBitrate = 600_000 // Reduced from 1 Mbps
-            static let maxFramerate = 24     // Reduced from 30
-            static let keyFrameInterval = 60 // Increased from 30 seconds
+            static let maxBitrate = 1_200_000
+            static let minBitrate = 300_000
+            static let startBitrate = 600_000
+            static let maxFramerate = 24
+            static let keyFrameInterval = 60
         }
         
         // Conservative quality presets for WebRTC
         enum QualityPresets {
-            static let lowBitrate = 400_000    // Reduced from 500 Kbps
-            static let mediumBitrate = 800_000 // Reduced from 1 Mbps
-            static let highBitrate = 1_200_000 // Reduced from 2 Mbps
+            static let lowBitrate = 400_000
+            static let mediumBitrate = 800_000
+            static let highBitrate = 1_200_000
         }
         
         // System performance thresholds
@@ -69,7 +128,7 @@ enum Constants {
             static let highMemoryThreshold = 0.8
             static let lowMemoryThreshold = 0.5
             static let maxDynamicFrameSkip = 5
-            static let minFrameInterval: TimeInterval = 0.033 // ~30 FPS max
+            static let minFrameInterval: TimeInterval = 0.033
         }
     }
     
@@ -78,11 +137,11 @@ enum Constants {
         static let enableDebugLogging = true
         static let useLocalVideoOnly = false
         static let enableWebRTC = true
-        static let enableLegacyHTTP = false // For fallback compatibility
+        static let enableLegacyHTTP = false
         static let enableWebRTCStats = true
         static let enableAutoReconnect = true
-        static let useConservativeDefaults = true // New flag for stability
-        static let enableAdaptiveQuality = true  // New flag for dynamic adjustments
+        static let useConservativeDefaults = true
+        static let enableAdaptiveQuality = true
     }
 }
 
@@ -125,32 +184,30 @@ public enum StreamQuality: String, CaseIterable, Identifiable {
         }
     }
     
-    // Conservative compression settings (for local recording)
     var compressionQuality: CGFloat {
         switch self {
-        case .low: return 0.25  // Reduced from 0.3
-        case .medium: return 0.5 // Reduced from 0.6
-        case .high: return 0.7   // Reduced from 0.85
+        case .low: return 0.25
+        case .medium: return 0.5
+        case .high: return 0.7
         }
     }
     
     var frameSkip: Int {
         switch self {
-        case .low: return 3      // Increased from 2
-        case .medium: return 2   // Increased from 1
-        case .high: return 1     // Increased from 0
+        case .low: return 3
+        case .medium: return 2
+        case .high: return 1
         }
     }
     
     var downsizeFactor: CGFloat {
         switch self {
-        case .low: return 0.5    // Reduced from 0.6
-        case .medium: return 0.7 // Reduced from 0.8
-        case .high: return 0.85  // Reduced from 1.0
+        case .low: return 0.5
+        case .medium: return 0.7
+        case .high: return 0.85
         }
     }
     
-    // Conservative WebRTC-specific settings
     var webRTCBitrate: Int {
         switch self {
         case .low: return Constants.WebRTC.QualityPresets.lowBitrate
@@ -161,43 +218,39 @@ public enum StreamQuality: String, CaseIterable, Identifiable {
     
     var webRTCFramerate: Int {
         switch self {
-        case .low: return 12     // Reduced from 15
-        case .medium: return 20  // Reduced from 24
-        case .high: return 24    // Reduced from 30
+        case .low: return 12
+        case .medium: return 20
+        case .high: return 24
         }
     }
     
     var webRTCResolutionScale: CGFloat {
         switch self {
-        case .low: return 0.4    // Reduced from 0.5
-        case .medium: return 0.65 // Reduced from 0.75
-        case .high: return 0.85   // Reduced from 1.0
+        case .low: return 0.4
+        case .medium: return 0.65
+        case .high: return 0.85
         }
     }
     
-    // Threshold for resolution downscaling
     var resolutionThreshold: Int {
         switch self {
-        case .low: return 720    // Reduced from 960
-        case .medium: return 1080 // Reduced from 1280
-        case .high: return 1280   // Reduced from 1600
+        case .low: return 720
+        case .medium: return 1080
+        case .high: return 1280
         }
     }
     
-    // Adaptive quality adjustments based on system performance
     func adaptedSettings(cpuUsage: Double, memoryPressure: Double) -> (frameSkip: Int, bitrate: Int, resolutionScale: CGFloat) {
         var adaptedFrameSkip = self.frameSkip
         var adaptedBitrate = self.webRTCBitrate
         var adaptedResolutionScale = self.webRTCResolutionScale
         
-        // Increase frame skip under high system load
         if cpuUsage > Constants.WebRTC.PerformanceThresholds.highCPUThreshold ||
            memoryPressure > Constants.WebRTC.PerformanceThresholds.highMemoryThreshold {
             adaptedFrameSkip = min(adaptedFrameSkip + 2, Constants.WebRTC.PerformanceThresholds.maxDynamicFrameSkip)
             adaptedBitrate = Int(Double(adaptedBitrate) * 0.7)
             adaptedResolutionScale *= 0.8
         }
-        // Reduce frame skip under low system load
         else if cpuUsage < Constants.WebRTC.PerformanceThresholds.lowCPUThreshold &&
                 memoryPressure < Constants.WebRTC.PerformanceThresholds.lowMemoryThreshold {
             adaptedFrameSkip = max(adaptedFrameSkip - 1, 1)
