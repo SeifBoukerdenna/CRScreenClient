@@ -153,7 +153,7 @@ struct DebugMenuScreen: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
                     
-                    TextField("192.168.1.100 or myserver.com", text: $serverURL)
+                    TextField("172.20.2.222 or myserver.com", text: $serverURL)
                         .font(.system(size: 16))
                         .padding(12)
                         .background(
