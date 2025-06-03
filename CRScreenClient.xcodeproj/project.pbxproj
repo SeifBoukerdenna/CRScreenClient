@@ -498,6 +498,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CRScreenClient/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Royal Trainer";
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app streams screen capture to a local server on your Mac for debugging.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Allow access to save your broadcast recordings to your photo library<";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -533,6 +534,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CRScreenClient/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Royal Trainer";
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app streams screen capture to a local server on your Mac for debugging.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Allow access to save your broadcast recordings to your photo library<";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

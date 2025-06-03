@@ -1,3 +1,4 @@
+// CRScreenClient/Features/UI/Screens/MainScreen.swift
 import SwiftUI
 import AVKit
 import ReplayKit
@@ -6,6 +7,7 @@ import Combine
 struct MainScreen: View {
     @StateObject private var broadcastManager = BroadcastManager()
     @StateObject private var pipManager = PiPManager()
+    @StateObject private var connectionMonitor: ConnectionMonitor
     @State private var broadcastButton: UIButton?
     @State private var player = AVPlayer()
     @State private var isVideoPrepared = false
@@ -31,6 +33,12 @@ struct MainScreen: View {
     
     @Environment(\.scenePhase) private var phase
     
+    // Initialize connection monitor with debug settings
+    init() {
+        let debugSettings = DebugSettings()
+        _connectionMonitor = StateObject(wrappedValue: ConnectionMonitor(debugSettings: debugSettings))
+    }
+    
     var body: some View {
         ZStack {
             // Background
@@ -43,6 +51,10 @@ struct MainScreen: View {
             VStack(spacing: 20) {
                 // Top bar with settings button and debug button
                 topBarSection
+                
+                // Connection Monitor (always visible at top)
+                ConnectionStatusView(connectionMonitor: connectionMonitor)
+                    .padding(.horizontal)
                 
                 // Video player section - demo video or broadcast status
                 videoPlayerSection
@@ -116,6 +128,12 @@ struct MainScreen: View {
         }
         .onChange(of: broadcastManager.lastRecordingURL) { _, url in
             handleNewRecording(url)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .frameSentToServer)) { _ in
+            connectionMonitor.incrementFramesSent()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .frameAcknowledgedByServer)) { _ in
+            connectionMonitor.incrementFramesAcknowledged()
         }
     }
     
@@ -236,6 +254,31 @@ struct MainScreen: View {
                             .font(.system(size: 14, weight: .medium, design: .monospaced))
                             .foregroundColor(.crGold)
                             .padding(.top, 8)
+                        
+                        // Frame delivery indicator
+                        if connectionMonitor.framesSentCount > 0 {
+                            HStack(spacing: 8) {
+                                Text("Frames:")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white.opacity(0.7))
+                                
+                                Text("\(connectionMonitor.framesSentCount) sent")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.blue)
+                                
+                                Text("•")
+                                    .foregroundColor(.white.opacity(0.5))
+                                
+                                Text("\(connectionMonitor.framesAcknowledgedCount) ack")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.green)
+                                
+                                Text("(\(connectionMonitor.connectionStatusViewModel.frameDeliveryText))")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(connectionMonitor.connectionStatusViewModel.frameDeliveryRate >= 90 ? .green : .orange)
+                            }
+                            .padding(.top, 4)
+                        }
                     }
                 )
                 .overlay(
@@ -291,6 +334,12 @@ struct MainScreen: View {
                     text: "WebRTC",
                     color: .green
                 )
+                
+                // Server connection status indicator
+                CapsuleLabel(
+                    text: connectionMonitor.isServerReachable ? "Server OK" : "Server Down",
+                    color: connectionMonitor.isServerReachable ? .green : .red
+                )
             }
             
             // Show debug indicator if debug mode is enabled
@@ -331,47 +380,6 @@ struct MainScreen: View {
                         )
                 )
         }
-    }
-    
-    private var qualityButton: some View {
-        Button(action: {
-            showQualitySettings = true
-        }) {
-            HStack(spacing: 8) {
-                let quality = broadcastManager.qualityLevel
-                Image(systemName: quality.icon)
-                    .font(.system(size: 18))
-                    .foregroundColor(quality.color)
-                
-                Text("Quality: \(quality.title)")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.8))
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-            .background(
-                Capsule()
-                    .fill(Color.crNavy.opacity(0.7))
-                    .overlay(
-                        Capsule()
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [broadcastManager.qualityLevel.color, broadcastManager.qualityLevel.color.opacity(0.7)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 2
-                            )
-                    )
-                    .shadow(color: .black.opacity(0.4), radius: 3, x: 0, y: 2)
-            )
-        }
-        .buttonStyle(ClashRoyaleButtonStyle())
-        .padding(.top, -8)
     }
     
     private var actionButtonsSection: some View {
@@ -467,11 +475,17 @@ struct MainScreen: View {
         if broadcastManager.isBroadcasting && !isVideoPrepared && !debugSettings.disableVideoPreview {
             shouldSetupVideo = true
         }
+        
+        // Start connection monitoring
+        connectionMonitor.startMonitoring()
     }
     
     private func handlePhaseChange(_ newValue: ScenePhase) {
         if newValue == .background {
             broadcastManager.stopIfNeeded()
+            connectionMonitor.stopMonitoring()
+        } else if newValue == .active {
+            connectionMonitor.startMonitoring()
         }
     }
     
@@ -486,6 +500,9 @@ struct MainScreen: View {
                 shouldSetupVideo = true
                 isVideoPrepared = false
             }
+            
+            // Reset connection counters when starting broadcast
+            connectionMonitor.resetCounters()
         } else {
             resetVideoState()
             
@@ -554,4 +571,10 @@ struct MainScreen: View {
             pipManager.stopPiP()
         }
     }
+}
+
+// MARK: - Notification Extensions
+extension Notification.Name {
+    static let frameSentToServer = Notification.Name("frameSentToServer")
+    static let frameAcknowledgedByServer = Notification.Name("frameAcknowledgedByServer")
 }

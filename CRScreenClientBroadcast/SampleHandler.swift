@@ -61,6 +61,12 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var recordingStartTime: CMTime?
     private var recordingURL: URL?
     
+    // MARK: - Server Connection Monitoring
+    private var framesSentToServer = 0
+    private var lastFrameSentTime = Date()
+    private var serverPingTimer: Timer?
+    private var lastServerPingTime = Date()
+    
     // MARK: - WebRTC Factory Configuration
     private func createPeerConnectionFactory() -> RTCPeerConnectionFactory {
         let decoderFactory = RTCDefaultVideoDecoderFactory()
@@ -108,6 +114,9 @@ class SampleHandler: RPBroadcastSampleHandler {
         // Start settings refresh timer to pick up real-time changes
         startSettingsRefreshTimer()
         
+        // Start server ping monitoring
+        startServerPingMonitoring()
+        
         // Initialize WebRTC with proper lifecycle management
         initializeWebRTCSession()
         
@@ -116,7 +125,111 @@ class SampleHandler: RPBroadcastSampleHandler {
             setupLocalRecording()
         }
         
+        // Reset frame counters
+        framesSentToServer = 0
+        lastFrameSentTime = Date()
+        
         NSLog("🚀 Broadcast started - Session: \(sessionCode), Custom Quality: \(Int(customImageQuality * 100))%, Frame Ratio: 1:\(Int(customFrameRatio)), Bitrate: \(Int(customBitrate/1000))k")
+    }
+    
+    // MARK: - Server Connection Monitoring
+    
+    private func startServerPingMonitoring() {
+        serverPingTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true) { [weak self] _ in
+            guard let self = self, self.isBroadcastActive else { return }
+            self.pingServer()
+        }
+        
+        // Perform initial ping after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.pingServer()
+        }
+    }
+    
+    private func pingServer() {
+        let serverURL = getServerHealthURL()
+        
+        guard let url = URL(string: serverURL) else {
+            NSLog("❌ Invalid server URL: \(serverURL)")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5.0
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+            
+            let currentTime = Date()
+            let timeSinceLastPing = currentTime.timeIntervalSince(self.lastServerPingTime)
+            self.lastServerPingTime = currentTime
+            
+            if let error = error {
+                NSLog("❌ Server ping failed after \(String(format: "%.1f", timeSinceLastPing))s: \(error.localizedDescription)")
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 200 {
+                    NSLog("✅ Server ping successful (\(String(format: "%.1f", timeSinceLastPing))s)")
+                    
+                    // Post notification that server is reachable
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(name: .frameAcknowledgedByServer, object: nil)
+                    }
+                    
+                    // Try to parse server info
+                    if let data = data,
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        let sessions = json["active_sessions"] as? Int ?? 0
+                        let broadcasters = json["total_broadcasters"] as? Int ?? 0
+                        let viewers = json["total_viewers"] as? Int ?? 0
+                        
+                        if sessions > 0 || broadcasters > 0 {
+                            NSLog("📊 Server status: \(sessions) sessions, \(broadcasters) broadcasters, \(viewers) viewers")
+                        }
+                    }
+                } else {
+                    NSLog("⚠️ Server ping returned HTTP \(httpResponse.statusCode)")
+                }
+            }
+        }
+        
+        task.resume()
+    }
+    
+    private func getServerHealthURL() -> String {
+        let defaults = UserDefaults(suiteName: groupID)
+        let useCustomServer = defaults?.bool(forKey: "debug_useCustomServer") ?? false
+        let customServerURL = defaults?.string(forKey: "debug_customServerURL") ?? ""
+        
+        if useCustomServer && !customServerURL.isEmpty {
+            var baseURL = customServerURL
+            
+            // Remove ws:// or wss:// prefix if present
+            if baseURL.hasPrefix("ws://") {
+                baseURL = String(baseURL.dropFirst(5))
+            } else if baseURL.hasPrefix("wss://") {
+                baseURL = String(baseURL.dropFirst(6))
+            }
+            
+            // Add http:// prefix
+            if !baseURL.hasPrefix("http://") && !baseURL.hasPrefix("https://") {
+                baseURL = "http://" + baseURL
+            }
+            
+            // Remove trailing /ws if present
+            if baseURL.hasSuffix("/ws") {
+                baseURL = String(baseURL.dropLast(3))
+            }
+            
+            return "\(baseURL)/health"
+        }
+        
+        // Default server
+        return "http://34.56.170.86:8080/health"
     }
     
     // MARK: - Custom Settings Management
@@ -378,7 +491,7 @@ class SampleHandler: RPBroadcastSampleHandler {
             let fps = Double(processed) / currentTime.timeIntervalSince(lastLog)
             let effectiveFPS = fps / customFrameRatio // Account for frame ratio
             
-            NSLog("📊 Custom Stats: %.1f FPS (effective: %.1f), Quality: \(Int(customImageQuality * 100))%%, Ratio: 1:\(Int(customFrameRatio)), Scale: \(Int(customResolutionScale * 100))%%, WebRTC: %@",
+            NSLog("📊 Custom Stats: %.1f FPS (effective: %.1f), Quality: \(Int(customImageQuality * 100))%%, Ratio: 1:\(Int(customFrameRatio)), Scale: \(Int(customResolutionScale * 100))%%, WebRTC: %@, Frames Sent: \(framesSentToServer)",
                   fps, effectiveFPS,
                   isWebRTCConnected ? "✅" : "❌")
             processed = 0
@@ -398,6 +511,21 @@ class SampleHandler: RPBroadcastSampleHandler {
         let videoFrame = RTCVideoFrame(buffer: rtcPixelBuffer, rotation: ._0, timeStampNs: Int64(timeStampNs))
         
         videoSource.capturer(RTCVideoCapturer(), didCapture: videoFrame)
+        
+        // Track frame sent
+        framesSentToServer += 1
+        lastFrameSentTime = Date()
+        
+        // Post notification for frame sent (throttled to avoid spam)
+        if framesSentToServer % 10 == 0 { // Only notify every 10th frame
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .frameSentToServer, object: nil)
+            }
+        }
+        
+        if framesSentToServer % 100 == 0 {
+            NSLog("📊 Sent \(framesSentToServer) frames to WebRTC")
+        }
     }
     
     private func applyCustomProcessing(to pixelBuffer: CVPixelBuffer) -> CVPixelBuffer {
@@ -455,6 +583,11 @@ class SampleHandler: RPBroadcastSampleHandler {
         systemMonitorTimer = nil
         settingsRefreshTimer?.invalidate()
         settingsRefreshTimer = nil
+        serverPingTimer?.invalidate()
+        serverPingTimer = nil
+        
+        // Log final frame count
+        NSLog("📊 Final frame count: \(framesSentToServer) frames sent to server")
         
         cleanupWebRTCComponents()
         
@@ -797,4 +930,10 @@ extension SampleHandler: SignalingClientDelegate {
             }
         }
     }
+}
+
+// MARK: - Notification Extensions
+extension Notification.Name {
+    static let frameSentToServer = Notification.Name("frameSentToServer")
+    static let frameAcknowledgedByServer = Notification.Name("frameAcknowledgedByServer")
 }
