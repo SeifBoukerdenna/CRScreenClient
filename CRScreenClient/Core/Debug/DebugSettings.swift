@@ -62,7 +62,7 @@ class DebugSettings: ObservableObject {
         if useCustomServer && !customServerURL.isEmpty {
             return formatServerURL(customServerURL)
         }
-        return "Default Server (34.56.170.86:8080)"
+        return "Default Server (35.208.133.112:8080)"
     }
     
     /// The effective WebRTC signaling URL
@@ -74,7 +74,7 @@ class DebugSettings: ObservableObject {
             }
             return formattedURL
         }
-        return "Default WebRTC Server (ws://34.56.170.86:8080/ws)"
+        return "Default WebRTC Server (ws://35.208.133.112:8080/ws)"
     }
     
     // MARK: - Initialization

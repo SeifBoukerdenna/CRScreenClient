@@ -229,7 +229,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         }
         
         // Default server
-        return "http://34.56.170.86:8080/health"
+        return "http://35.208.133.112:8080/health"
     }
     
     // MARK: - Custom Settings Management

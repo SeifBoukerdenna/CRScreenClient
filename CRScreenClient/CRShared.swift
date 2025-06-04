@@ -6,9 +6,9 @@ enum Constants {
         static let demoVideo = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
         
         // Default server URLs (used as fallbacks when no custom URL is set)
-        private static let defaultWebRTCSignalingServer = "ws://34.56.170.86:8080/ws"
-        private static let defaultWebRTCSignalingServerSecure = "wss://34.56.170.86:8080/ws"
-        private static let defaultBroadcastServer = "http://34.56.170.86:8080/upload/"
+        private static let defaultWebRTCSignalingServer = "ws://35.208.133.112:8080/ws"
+        private static let defaultWebRTCSignalingServerSecure = "wss://35.208.133.112:8080/ws"
+        private static let defaultBroadcastServer = "http://35.208.133.112:8080/upload/"
         
         // Dynamic server URL getters that check debug settings
         static var webRTCSignalingServer: String {

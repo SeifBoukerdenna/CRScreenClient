@@ -184,7 +184,7 @@ class ConnectionMonitor: ObservableObject {
         // 1. Start with either the custom value or default host
         var raw = debugSettings.useCustomServer && !debugSettings.customServerURL.isEmpty
                   ? debugSettings.customServerURL
-                  : "34.56.170.86:8080"
+                  : "35.208.133.112:8080"
 
         // 2. Strip any leading scheme so we can rebuild cleanly
         if let range = raw.range(of: "://") { raw = String(raw[range.upperBound...]) }
