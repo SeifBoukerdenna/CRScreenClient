@@ -48,56 +48,12 @@ struct MainScreen: View {
             )
             .ignoresSafeArea()
             
-            VStack(spacing: 20) {
-                // Top bar with settings button and debug button
-                topBarSection
-                
-                // Connection Monitor (always visible at top)
-                ConnectionStatusView(connectionMonitor: connectionMonitor)
-                    .padding(.horizontal)
-                
-                // Video player section - demo video or broadcast status
-                videoPlayerSection
-                
-                // Status indicators
-                statusSection
-                
-                // Session Code
-                if broadcastManager.isBroadcasting {
-                    sessionCodeSection
-                    GuideCard()
-                }
-                
-                // Action buttons
-                actionButtonsSection
-                
-                // Version number at bottom
-                Text(appVersion)
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.5))
-                    .padding(.bottom, 8)
-                    .onTapGesture(count: 5) {
-                        debugSettings.debugModeEnabled = true
-                        showDebugMenu = true
-                    }
-            }
-            .padding(.horizontal)
-            .sheet(isPresented: $showQualitySettings) {
-                QualitySelector(selectedQuality: $broadcastManager.qualityLevel)
-                    .interactiveDismissDisabled()
-            }
-            .sheet(isPresented: $showSettings) {
-                NavigationView {
-                    SettingsScreen(storageManager: broadcastManager.storageManager, appVersion: appVersion)
-                }
-            }
-            .fullScreenCover(isPresented: $showRecentBroadcasts) {
-                RecentBroadcastsScreen(storageManager: broadcastManager.storageManager)
-            }
-            .sheet(isPresented: $showDebugMenu) {
-                NavigationView {
-                    DebugMenuScreen(debugSettings: debugSettings)
-                }
+            if broadcastManager.isBroadcasting {
+                // Clean Broadcasting Layout
+                broadcastingView
+            } else {
+                // Pre-broadcast Layout
+                defaultView
             }
             
             // Toast notification for saved broadcast
@@ -135,267 +91,205 @@ struct MainScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .frameAcknowledgedByServer)) { _ in
             connectionMonitor.incrementFramesAcknowledged()
         }
-    }
-    
-    // MARK: - View Components
-    
-    private var topBarSection: some View {
-        HStack {
-            Spacer()
-            
-            // Settings button
-            Button(action: { showSettings = true }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 20))
-                    Text("Settings")
-                        .font(.system(size: 16, weight: .bold))
-                }
-                .foregroundColor(.white)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 20)
-                .background(
-                    Capsule()
-                        .fill(Color.crNavy.opacity(0.8))
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [.crGold, .crGold.opacity(0.7)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 2
-                                )
-                        )
-                        .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 3)
-                )
-            }
-            .buttonStyle(ClashRoyaleButtonStyle())
-            
-            // Debug menu button
-            if debugSettings.debugModeEnabled {
-                Spacer().frame(width: 8)
-                
-                Button(action: { showDebugMenu = true }) {
-                    Image(systemName: "ladybug.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(.red.opacity(0.8))
-                        .padding(8)
-                        .background(
-                            Circle()
-                                .fill(Color.crNavy.opacity(0.7))
-                                .overlay(
-                                    Circle()
-                                        .strokeBorder(Color.red.opacity(0.5), lineWidth: 1.5)
-                                )
-                        )
-                }
-            }
-            
-            Spacer()
+        .sheet(isPresented: $showQualitySettings) {
+            QualitySelector(selectedQuality: $broadcastManager.qualityLevel)
+                .interactiveDismissDisabled()
         }
-        .padding(.top, 8)
-    }
-    
-    private var videoPlayerSection: some View {
-        VStack(spacing: 8) {
-            if broadcastManager.isBroadcasting && !debugSettings.disableVideoPreview {
-                // Show broadcast status when this device is broadcasting
-                broadcastStatusView
-                
-            } else if broadcastManager.isBroadcasting && debugSettings.disableVideoPreview {
-                // Show placeholder when video is disabled
-                Text("Video Preview Disabled")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.black.opacity(0.3))
-                    )
-                    .padding(.top, 10)
-                    
-            } else {
-                // When not broadcasting, add some space
-                Spacer().frame(height: 20)
+        .sheet(isPresented: $showSettings) {
+            NavigationView {
+                SettingsScreen(storageManager: broadcastManager.storageManager, appVersion: appVersion)
+            }
+        }
+        .fullScreenCover(isPresented: $showRecentBroadcasts) {
+            RecentBroadcastsScreen(storageManager: broadcastManager.storageManager)
+        }
+        .sheet(isPresented: $showDebugMenu) {
+            NavigationView {
+                DebugMenuScreen(debugSettings: debugSettings)
             }
         }
     }
     
-    private var broadcastStatusView: some View {
-        VStack(spacing: 12) {
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [.crBlue.opacity(0.3), .crNavy.opacity(0.5)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(height: 200)
-                .cornerRadius(Constants.UI.cornerRadius)
-                .overlay(
-                    VStack {
-                        Image(systemName: "dot.radiowaves.left.and.right")
-                            .font(.system(size: 48))
-                            .foregroundColor(.crGold)
+    // MARK: - Broadcasting View (Clean & Focused)
+    
+    private var broadcastingView: some View {
+        VStack(spacing: 24) {
+            // Minimal top bar - just connection status
+            HStack {
+                ConnectionStatusView(connectionMonitor: connectionMonitor)
+                    .scaleEffect(0.9)
+                
+                Spacer()
+                
+                // Settings - smaller and less prominent
+                settingsButton
+                    .scaleEffect(0.8)
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            
+            Spacer()
+            
+            // Central broadcast status
+            VStack(spacing: 20) {
+                // Live indicator with session code
+                VStack(spacing: 12) {
+                    // Prominent LIVE indicator
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(.red)
+                            .frame(width: 12, height: 12)
+                            .scaleEffect(1.2)
+                            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: true)
                         
-                        Text("Broadcasting Active")
-                            .font(.system(size: 20, weight: .bold))
+                        Text("LIVE")
+                            .font(.system(size: 24, weight: .black))
+                            .foregroundColor(.red)
+                        
+                        Text("•")
+                            .foregroundColor(.white.opacity(0.5))
+                        
+                        Text(BroadcastService.shared.formatTimeString(broadcastManager.elapsed))
+                            .font(.system(size: 20, weight: .heavy, design: .monospaced))
                             .foregroundColor(.white)
-                        
-                        Text("Screen is being streamed via WebRTC")
-                            .font(.system(size: 16))
+                    }
+                    
+                    // Session code - large and prominent
+                    VStack(spacing: 8) {
+                        Text("Session Code")
+                            .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.white.opacity(0.8))
                         
-                        Text("Session: \(broadcastManager.code)")
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
-                            .foregroundColor(.crGold)
-                            .padding(.top, 8)
-                        
-                        // Frame delivery indicator
-                        if connectionMonitor.framesSentCount > 0 {
-                            HStack(spacing: 8) {
-                                Text("Frames:")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white.opacity(0.7))
-                                
-                                Text("\(connectionMonitor.framesSentCount) sent")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.blue)
-                                
-                                Text("•")
-                                    .foregroundColor(.white.opacity(0.5))
-                                
-                                Text("\(connectionMonitor.framesAcknowledgedCount) ack")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.green)
-                                
-                                Text("(\(connectionMonitor.connectionStatusViewModel.frameDeliveryText))")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(connectionMonitor.connectionStatusViewModel.frameDeliveryRate >= 90 ? .green : .orange)
-                            }
-                            .padding(.top, 4)
-                        }
+                        Text(broadcastManager.code)
+                            .font(.system(size: 56, weight: .black, design: .monospaced))
+                            .foregroundColor(.white)
+                            .tracking(4)
+                            .overlay(
+                                // Subtle glow effect
+                                Text(broadcastManager.code)
+                                    .font(.system(size: 56, weight: .black, design: .monospaced))
+                                    .foregroundColor(.crGold)
+                                    .blur(radius: 8)
+                                    .opacity(0.3)
+                            )
                     }
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Constants.UI.cornerRadius)
-                        .stroke(Color.crGold, lineWidth: 2)
-                )
+                    .padding(.vertical, 16)
+                    .padding(.horizontal, 24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.black.opacity(0.2))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [.crGold.opacity(0.8), .crGold.opacity(0.3)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 2
+                                    )
+                            )
+                    )
+                }
+                
+                // Simplified guide card
+                simplifiedGuideCard
+                
+                // Quality indicator - compact
+                compactQualityIndicator
+            }
+            
+            Spacer()
+            
+            // Stop button - prominent but clean
+            stopBroadcastButton
+                .padding(.horizontal, 40)
+                .padding(.bottom, 40)
+        }
+    }
+    
+    // MARK: - Default View (Not Broadcasting)
+    
+    private var defaultView: some View {
+        VStack(spacing: 20) {
+            // Full top bar when not broadcasting
+            HStack {
+                Spacer()
+                
+                // Settings button
+                Button(action: { showSettings = true }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 20))
+                        Text("Settings")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 20)
+                    .background(
+                        Capsule()
+                            .fill(Color.crNavy.opacity(0.8))
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [.crGold, .crGold.opacity(0.7)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 2
+                                    )
+                            )
+                            .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 3)
+                    )
+                }
+                .buttonStyle(ClashRoyaleButtonStyle())
+                
+                // Debug menu button
+                if debugSettings.debugModeEnabled {
+                    Spacer().frame(width: 8)
+                    
+                    Button(action: { showDebugMenu = true }) {
+                        Image(systemName: "ladybug.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.red.opacity(0.8))
+                            .padding(8)
+                            .background(
+                                Circle()
+                                    .fill(Color.crNavy.opacity(0.7))
+                                    .overlay(
+                                        Circle()
+                                            .strokeBorder(Color.red.opacity(0.5), lineWidth: 1.5)
+                                    )
+                            )
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.top, 8)
+            
+            // Connection Monitor (always visible at top)
+            ConnectionStatusView(connectionMonitor: connectionMonitor)
                 .padding(.horizontal)
             
-            qualityIndicator
-        }
-    }
-    
-    private var qualityIndicator: some View {
-        HStack(spacing: 4) {
-            let quality = broadcastManager.qualityLevel
-            Image(systemName: quality.icon)
-                .font(.system(size: 16))
-                .foregroundColor(quality.color)
+            Spacer()
             
-            Text("Streaming Quality: ")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white.opacity(0.9))
-            
-            Text(quality.title)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(quality.color)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(
-            Capsule()
-                .fill(Color.black.opacity(0.3))
-                .overlay(
-                    Capsule()
-                        .strokeBorder(broadcastManager.qualityLevel.color.opacity(0.5), lineWidth: 1)
-                )
-        )
-    }
-    
-    private var statusSection: some View {
-        HStack(spacing: 12) {
-            CapsuleLabel(
-                text: broadcastManager.isBroadcasting ? "LIVE" : "OFFLINE",
-                color: broadcastManager.isBroadcasting ? .red : .gray
-            )
-            if broadcastManager.isBroadcasting {
-                CapsuleLabel(
-                    text: BroadcastService.shared.formatTimeString(broadcastManager.elapsed),
-                    color: .crGold.opacity(0.9)
-                )
-                
-                CapsuleLabel(
-                    text: "WebRTC",
-                    color: .green
-                )
-                
-                // Server connection status indicator
-                CapsuleLabel(
-                    text: connectionMonitor.isServerReachable ? "Server OK" : "Server Down",
-                    color: connectionMonitor.isServerReachable ? .green : .red
-                )
+            // Status section
+            HStack(spacing: 12) {
+                CapsuleLabel(text: "OFFLINE", color: .gray)
             }
             
-            // Show debug indicator if debug mode is enabled
-            if debugSettings.debugModeEnabled && broadcastManager.isBroadcasting {
-                CapsuleLabel(
-                    text: "DEBUG",
-                    color: .red.opacity(0.7)
-                )
-            }
-        }
-    }
-    
-    private var sessionCodeSection: some View {
-        VStack(spacing: 6) {
-            Text("Session Code")
-                .font(.headline)
-                .foregroundColor(.white.opacity(0.8))
-            Text(broadcastManager.code)
-                .font(.system(
-                    size: 48,
-                    weight: .heavy,
-                    design: .monospaced
-                ))
-                .foregroundColor(.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.crGold.opacity(0.5), lineWidth: 2)
-                        .blur(radius: 4)
-                        .opacity(0.7)
-                        .mask(
-                            Text(broadcastManager.code)
-                                .font(.system(
-                                    size: 48,
-                                    weight: .heavy,
-                                    design: .monospaced
-                                ))
-                                .foregroundColor(.white)
-                        )
-                )
-        }
-    }
-    
-    private var actionButtonsSection: some View {
-        VStack(spacing: 16) {
-            // Start/Stop button
+            // Start broadcasting button
             Button(action: toggleBroadcast) {
                 VStack(spacing: 8) {
-                    Image(systemName: broadcastManager.isBroadcasting
-                          ? "stop.fill"
-                          : "dot.radiowaves.left.and.right")
+                    Image(systemName: "dot.radiowaves.left.and.right")
                         .resizable()
                         .scaledToFit()
                         .frame(height: 50)
                         .foregroundColor(.white)
-                    Text(broadcastManager.isBroadcasting ? "Stop Broadcasting"
-                                           : "Start Broadcasting")
+                    Text("Start Broadcasting")
                         .font(.system(size: 22, weight: .heavy))
                         .foregroundColor(.white)
                 }
@@ -405,41 +299,179 @@ struct MainScreen: View {
             }
             .buttonStyle(.plain)
             
-            // Recent Broadcasts button (only when not broadcasting)
-            if !broadcastManager.isBroadcasting {
-                Button(action: {
-                    broadcastManager.storageManager.refreshBroadcasts()
-                    showRecentBroadcasts = true
-                }) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "list.bullet")
-                            .font(.system(size: 18))
-                        Text("Recent Broadcasts")
-                            .font(.system(size: 18, weight: .semibold))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.vertical, 14)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        Capsule()
-                            .fill(Color.crPurple)
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(
-                                        LinearGradient(
-                                            colors: [.crPurpleLight, .crPurple.opacity(0.7)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ),
-                                        lineWidth: 2
-                                    )
-                            )
-                            .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 3)
-                    )
+            // Recent Broadcasts button
+            Button(action: {
+                broadcastManager.storageManager.refreshBroadcasts()
+                showRecentBroadcasts = true
+            }) {
+                HStack(spacing: 10) {
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 18))
+                    Text("Recent Broadcasts")
+                        .font(.system(size: 18, weight: .semibold))
                 }
-                .buttonStyle(ClashRoyaleButtonStyle())
+                .foregroundColor(.white)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity)
+                .background(
+                    Capsule()
+                        .fill(Color.crPurple)
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [.crPurpleLight, .crPurple.opacity(0.7)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 2
+                                )
+                        )
+                        .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 3)
+                )
+            }
+            .buttonStyle(ClashRoyaleButtonStyle())
+            
+            // Version number at bottom
+            Text(appVersion)
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.5))
+                .padding(.bottom, 8)
+                .onTapGesture(count: 5) {
+                    debugSettings.debugModeEnabled = true
+                    showDebugMenu = true
+                }
+            
+            Spacer()
+        }
+        .padding(.horizontal)
+    }
+    
+    // MARK: - Component Views
+    
+    private var settingsButton: some View {
+        Button(action: { showSettings = true }) {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 18))
+                .foregroundColor(.white.opacity(0.8))
+                .padding(8)
+                .background(
+                    Circle()
+                        .fill(Color.black.opacity(0.3))
+                        .overlay(
+                            Circle()
+                                .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var simplifiedGuideCard: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.crGold)
+                
+                Text("Welcome, Chief!")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.crGold)
+            }
+            
+            VStack(spacing: 8) {
+                Text("Open")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.8))
+                
+                Text("royaltrainer.com")
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundColor(.crPurple)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.black.opacity(0.2))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(Color.crPurple.opacity(0.6), lineWidth: 1)
+                            )
+                    )
+                
+                Text("Enter your 4‑digit code above")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.7))
             }
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.crNavy.opacity(0.6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.crGold.opacity(0.5), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, 20)
+    }
+    
+    private var compactQualityIndicator: some View {
+        HStack(spacing: 6) {
+            let quality = broadcastManager.qualityLevel
+            Image(systemName: quality.icon)
+                .font(.system(size: 14))
+                .foregroundColor(quality.color)
+            
+            Text(quality.title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(quality.color)
+            
+            Text("Quality")
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.7))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(Color.black.opacity(0.2))
+                .overlay(
+                    Capsule()
+                        .strokeBorder(broadcastManager.qualityLevel.color.opacity(0.4), lineWidth: 1)
+                )
+        )
+    }
+    
+    private var stopBroadcastButton: some View {
+        Button(action: toggleBroadcast) {
+            HStack(spacing: 12) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.white)
+                
+                Text("Stop Broadcasting")
+                    .font(.system(size: 20, weight: .heavy))
+                    .foregroundColor(.white)
+            }
+            .padding(.horizontal, 32)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(
+                        LinearGradient(
+                            colors: [.red.opacity(0.8), .red.opacity(0.6)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(Color.white.opacity(0.3), lineWidth: 2)
+                    )
+                    .shadow(color: .black.opacity(0.4), radius: 6, x: 0, y: 4)
+            )
+        }
+        .buttonStyle(ClashRoyaleButtonStyle())
     }
     
     private var broadcastSavedToast: some View {
