@@ -15,161 +15,92 @@ class WatermarkManager: ObservableObject {
 
 struct WatermarkOverlay: View {
     @ObservedObject var debugSettings: DebugSettings
-    @State private var randomPositions: [(x: Double, y: Double, rotation: Double)] = []
     @State private var deviceInfo: String = ""
     @State private var animationOffset: Double = 0
     
     var body: some View {
         if debugSettings.showWatermark {
             ZStack {
-                // Random positioned watermarks
-                randomWatermarkPattern
-                
-                // Device info watermark (center)
-                deviceInfoWatermark
-                
-                // Moving watermarks
-                animatedWatermarkPattern
+                // Repeating grid pattern like stock photos
+                repeatingWatermarkGrid
             }
             .allowsHitTesting(false)
-            .opacity(0.35) // Much more prominent
+            .opacity(0.4) // Very prominent
             .onAppear {
-                generateRandomPositions()
                 generateDeviceInfo()
                 startAnimation()
             }
         }
     }
     
-    private var randomWatermarkPattern: some View {
+    private var repeatingWatermarkGrid: some View {
         GeometryReader { geometry in
+            let watermarkWidth: CGFloat = 200
+            let watermarkHeight: CGFloat = 120
+            let spacing: CGFloat = 80
+            
+            let columns = Int((geometry.size.width + spacing) / (watermarkWidth + spacing)) + 2
+            let rows = Int((geometry.size.height + spacing) / (watermarkHeight + spacing)) + 2
+            
             ZStack {
-                // Generate 20-25 random watermarks
-                ForEach(Array(randomPositions.enumerated()), id: \.offset) { index, position in
-                    watermarkText(variant: index % 4)
-                        .position(
-                            x: geometry.size.width * position.x,
-                            y: geometry.size.height * position.y
-                        )
-                        .rotationEffect(.degrees(position.rotation))
+                ForEach(0..<rows, id: \.self) { row in
+                    ForEach(0..<columns, id: \.self) { column in
+                        let isEvenRow = row % 2 == 0
+                        let xOffset = isEvenRow ? 0 : watermarkWidth / 2
+                        
+                        watermarkPattern
+                            .position(
+                                x: CGFloat(column) * (watermarkWidth + spacing) + watermarkWidth/2 + xOffset + animationOffset * 10,
+                                y: CGFloat(row) * (watermarkHeight + spacing) + watermarkHeight/2 + animationOffset * 5
+                            )
+                            .rotationEffect(.degrees(-25 + animationOffset * 2))
+                    }
                 }
             }
         }
     }
     
-    private var deviceInfoWatermark: some View {
-        GeometryReader { geometry in
-            VStack(spacing: 4) {
-                Text("🔒 BETA BUILD 🔒")
-                    .font(.system(size: 16, weight: .black, design: .monospaced))
-                    .foregroundColor(.red)
-                
-                Text(deviceInfo)
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                
-                Text("@royaltrainer_dev")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(.yellow)
-                
-                Text("contact@royaltrainer.com")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundColor(.orange)
-            }
-            .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.black.opacity(0.6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Color.red.opacity(0.8), lineWidth: 2)
-                    )
-            )
-            .position(
-                x: geometry.size.width * 0.5,
-                y: geometry.size.height * 0.5
-            )
+    private var watermarkPattern: some View {
+        VStack(spacing: 3) {
+            Text("🔒 BETA BUILD 🔒")
+                .font(.system(size: 14, weight: .black, design: .monospaced))
+                .foregroundColor(.red)
+            
+            Text(deviceInfo)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+            
+            Text("@royaltrainer_dev")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(.yellow)
+            
+            Text("contact@royaltrainer.com")
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .foregroundColor(.orange)
+            
+            Text("DO NOT DISTRIBUTE")
+                .font(.system(size: 9, weight: .black, design: .monospaced))
+                .foregroundColor(.red)
         }
-    }
-    
-    private var animatedWatermarkPattern: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // 5 moving watermarks
-                ForEach(0..<5, id: \.self) { index in
-                    watermarkText(variant: index + 5)
-                        .position(
-                            x: geometry.size.width * (0.2 + Double(index) * 0.15 + animationOffset * 0.1),
-                            y: geometry.size.height * (0.15 + Double(index) * 0.15 + animationOffset * 0.05)
-                        )
-                        .rotationEffect(.degrees(animationOffset * 30 + Double(index * 72)))
-                        .opacity(0.2)
-                }
-            }
-        }
-    }
-    
-    private func watermarkText(variant: Int) -> some View {
-        VStack(spacing: 2) {
-            // Alternate between different warning messages
-            switch variant % 4 {
-            case 0:
-                Text("⚠️ BETA BUILD ⚠️")
-                    .font(.system(size: 12, weight: .black, design: .monospaced))
-                    .foregroundColor(.red)
-                Text("DO NOT DISTRIBUTE")
-                    .font(.system(size: 10, weight: .heavy, design: .monospaced))
-                    .foregroundColor(.red)
-            case 1:
-                Text("@royaltrainer_dev")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(.yellow)
-                Text("contact@royaltrainer.com")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundColor(.orange)
-            case 2:
-                Text("🚫 UNAUTHORIZED 🚫")
-                    .font(.system(size: 11, weight: .black, design: .monospaced))
-                    .foregroundColor(.red)
-                Text("USAGE PROHIBITED")
-                    .font(.system(size: 9, weight: .heavy, design: .monospaced))
-                    .foregroundColor(.red)
-            default:
-                Text("ROYAL TRAINER BETA")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
-                Text("INTERNAL BUILD")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundColor(.white)
-            }
-        }
-        .padding(4)
+        .padding(6)
         .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.black.opacity(0.5))
-                .blur(radius: 0.5)
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.black.opacity(0.6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Color.red.opacity(0.7), lineWidth: 1)
+                )
         )
     }
     
+    private func watermarkText(variant: Int) -> some View {
+        // Removed - no longer needed
+        EmptyView()
+    }
+    
     private func generateRandomPositions() {
-        randomPositions = []
-        
-        // Generate 20-25 truly random positions
-        for _ in 0..<Int.random(in: 5...15) {
-            let position = (
-                x: Double.random(in: 0.05...0.95),
-                y: Double.random(in: 0.05...0.95),
-                rotation: Double.random(in: -90...90)
-            )
-            randomPositions.append(position)
-        }
-        
-        // Ensure corners are always covered
-        randomPositions.append((x: 0.9, y: 0.1, rotation: -15))
-        randomPositions.append((x: 0.1, y: 0.9, rotation: 15))
-        randomPositions.append((x: 0.9, y: 0.9, rotation: -15))
-        randomPositions.append((x: 0.1, y: 0.1, rotation: 15))
+        // Removed - no longer needed
     }
     
     private func generateDeviceInfo() {
