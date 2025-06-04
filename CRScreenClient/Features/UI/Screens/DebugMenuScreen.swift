@@ -1,4 +1,3 @@
-// CRScreenClient/Features/UI/Screens/DebugMenuScreen.swift
 import SwiftUI
 
 struct DebugMenuScreen: View {
@@ -44,6 +43,7 @@ struct DebugMenuScreen: View {
                     .padding(.top, 30)
                     
                     // Settings Sections
+                    securitySettingsSection
                     serverSettingsSection
                     connectionSettingsSection
                     recordingSettingsSection
@@ -79,7 +79,7 @@ struct DebugMenuScreen: View {
                             validateURL()
                         }
                     } message: {
-                        Text("Are you sure you want to reset all debug settings to their default values?")
+                        Text("Are you sure you want to reset all debug settings to their default values? Watermark will remain enabled for security.")
                     }
                     
                     // Close button
@@ -124,7 +124,80 @@ struct DebugMenuScreen: View {
         }
     }
     
-    // MARK: - Section Views
+    // MARK: - Security Settings Section (NEW - FIRST SECTION)
+    
+    private var securitySettingsSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Section Header
+            sectionHeader(icon: "shield.fill", title: "Security & Protection")
+            
+            // Settings Box with warning styling
+            VStack(spacing: 16) {
+                // Watermark toggle with warning
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        
+                        Text("App Watermark")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        Spacer()
+                        
+                        Toggle("", isOn: $debugSettings.showWatermark)
+                            .toggleStyle(SwitchToggleStyle(tint: .red))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("⚠️ SECURITY WARNING:")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.red)
+                        
+                        Text("Disabling the watermark removes leak protection from this beta build. The watermark prevents unauthorized distribution and helps track usage.")
+                            .font(.system(size: 13))
+                            .foregroundColor(.white.opacity(0.9))
+                        
+                        Text("Contact: @royaltrainer_dev • contact@royaltrainer.com")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.crGold)
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.red.opacity(0.1))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(Color.red.opacity(0.3), lineWidth: 1)
+                            )
+                    )
+                    
+                    // Current watermark status
+                    HStack {
+                        Image(systemName: debugSettings.showWatermark ? "checkmark.shield.fill" : "xmark.shield.fill")
+                            .foregroundColor(debugSettings.showWatermark ? .green : .red)
+                        
+                        Text("Watermark Status: \(debugSettings.showWatermark ? "ACTIVE" : "DISABLED")")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(debugSettings.showWatermark ? .green : .red)
+                    }
+                    .padding(.top, 4)
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.crNavy.opacity(0.8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .strokeBorder(debugSettings.showWatermark ? Color.green : Color.red, lineWidth: 2)
+                    )
+            )
+            .padding(.bottom, 10)
+        }
+    }
+    
+    // MARK: - Other Sections (Keep existing sections but add them here...)
     
     private var serverSettingsSection: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -383,6 +456,7 @@ struct DebugMenuScreen: View {
                         statusRow(title: "Device:", value: UIDevice.current.model, icon: "iphone")
                         statusRow(title: "iOS Version:", value: UIDevice.current.systemVersion, icon: "apple.logo")
                         statusRow(title: "WebRTC:", value: Constants.FeatureFlags.enableWebRTC ? "Enabled" : "Disabled", icon: "network")
+                        statusRow(title: "Watermark:", value: debugSettings.showWatermark ? "ACTIVE" : "DISABLED", icon: "shield.fill")
                     }
                 }
                 .padding(.vertical, 10)
@@ -490,7 +564,7 @@ struct DebugMenuScreen: View {
             
             Text(value)
                 .font(.system(size: 15, weight: .medium))
-                .foregroundColor(.white)
+                .foregroundColor(title == "Watermark:" ? (value == "ACTIVE" ? .green : .red) : .white)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

@@ -55,6 +55,13 @@ class DebugSettings: ObservableObject {
         }
     }
     
+    /// Whether to show the app watermark (ALWAYS ON BY DEFAULT)
+    @Published var showWatermark: Bool {
+        didSet {
+            saveSettings()
+        }
+    }
+    
     // MARK: - Computed Properties
     
     /// The effective server URL to use for broadcasting
@@ -88,6 +95,15 @@ class DebugSettings: ObservableObject {
         self.debugModeEnabled = UserDefaults.standard.bool(forKey: Keys.debugModeEnabled)
         self.preferSecureConnection = UserDefaults.standard.bool(forKey: Keys.preferSecureConnection)
         self.customPort = UserDefaults.standard.string(forKey: Keys.customPort) ?? "8080"
+        
+        // Watermark is ON by default (security feature)
+        if UserDefaults.standard.object(forKey: Keys.showWatermark) == nil {
+            // First time - default to ON
+            self.showWatermark = true
+            UserDefaults.standard.set(true, forKey: Keys.showWatermark)
+        } else {
+            self.showWatermark = UserDefaults.standard.bool(forKey: Keys.showWatermark)
+        }
     }
     
     // MARK: - Private Methods
@@ -100,6 +116,7 @@ class DebugSettings: ObservableObject {
         UserDefaults.standard.set(debugModeEnabled, forKey: Keys.debugModeEnabled)
         UserDefaults.standard.set(preferSecureConnection, forKey: Keys.preferSecureConnection)
         UserDefaults.standard.set(customPort, forKey: Keys.customPort)
+        UserDefaults.standard.set(showWatermark, forKey: Keys.showWatermark)
         
         // Also save critical settings to app group for broadcast extension access
         let groupDefaults = UserDefaults(suiteName: Constants.Broadcast.groupID)
@@ -113,6 +130,7 @@ class DebugSettings: ObservableObject {
         if Constants.FeatureFlags.enableDebugLogging {
             print("Debug settings saved: useCustomServer=\(useCustomServer), customURL=\(effectiveServerURL)")
             print("WebRTC URL: \(effectiveWebRTCURL)")
+            print("Watermark enabled: \(showWatermark)")
         }
     }
     
@@ -140,6 +158,7 @@ class DebugSettings: ObservableObject {
         static let debugModeEnabled = "debug_debugModeEnabled"
         static let preferSecureConnection = "debug_preferSecureConnection"
         static let customPort = "debug_customPort"
+        static let showWatermark = "debug_showWatermark"
     }
     
     // MARK: - Helper Methods
@@ -151,6 +170,8 @@ class DebugSettings: ObservableObject {
         disableLocalRecording = false
         preferSecureConnection = false
         customPort = "8080"
+        // IMPORTANT: Keep watermark ON even after reset for security
+        showWatermark = true
         // Leave debug mode enabled since they're in the debug menu
     }
     
@@ -189,6 +210,7 @@ class DebugSettings: ObservableObject {
             "effectiveWebRTCURL": effectiveWebRTCURL,
             "preferSecureConnection": preferSecureConnection,
             "customPort": customPort,
+            "showWatermark": showWatermark,
             "isValidURL": validateServerURL().isValid
         ]
     }

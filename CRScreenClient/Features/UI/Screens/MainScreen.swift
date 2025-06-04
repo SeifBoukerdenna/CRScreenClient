@@ -4,6 +4,21 @@ import AVKit
 import ReplayKit
 import Combine
 
+
+extension View {
+    func withSheetWatermark() -> some View {
+        ZStack {
+            self
+            
+            if let debugSettings = WatermarkManager.shared.debugSettings {
+                WatermarkOverlay(debugSettings: debugSettings)
+            }
+        }
+    }
+}
+
+
+
 struct MainScreen: View {
     @StateObject private var broadcastManager = BroadcastManager()
     @StateObject private var pipManager = PiPManager()
@@ -94,19 +109,23 @@ struct MainScreen: View {
         .sheet(isPresented: $showQualitySettings) {
             QualitySelector(selectedQuality: $broadcastManager.qualityLevel)
                 .interactiveDismissDisabled()
+                .withSheetWatermark()
         }
         .sheet(isPresented: $showSettings) {
             NavigationView {
                 SettingsScreen(storageManager: broadcastManager.storageManager, appVersion: appVersion)
             }
+            .withSheetWatermark()
         }
         .fullScreenCover(isPresented: $showRecentBroadcasts) {
             RecentBroadcastsScreen(storageManager: broadcastManager.storageManager)
+                .withSheetWatermark()
         }
         .sheet(isPresented: $showDebugMenu) {
             NavigationView {
                 DebugMenuScreen(debugSettings: debugSettings)
             }
+            .withSheetWatermark()
         }
     }
     

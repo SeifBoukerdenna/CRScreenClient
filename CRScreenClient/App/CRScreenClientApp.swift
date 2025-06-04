@@ -6,8 +6,10 @@ struct CRScreenClientApp: App {
     
     var body: some Scene {
         WindowGroup {
-            MainScreen()
-                .environmentObject(appEnvironment)
+            WatermarkedAppView(debugSettings: appEnvironment.debugSettings) {
+                MainScreen()
+                    .environmentObject(appEnvironment)
+            }
         }
     }
 }
