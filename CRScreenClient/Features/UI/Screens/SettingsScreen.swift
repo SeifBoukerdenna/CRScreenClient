@@ -50,9 +50,6 @@ struct SettingsScreen: View {
                     // Enhanced Streaming Controls Section
                     streamingControlsSection
                     
-                    // Storage Settings Section
-                    storageSettingsSection
-                    
                     // About Section
                     aboutSection
                     
@@ -341,103 +338,7 @@ struct SettingsScreen: View {
         .padding(.bottom, 20)
     }
     
-    // MARK: - Storage Settings Section
-    
-    private var storageSettingsSection: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 24))
-                    .foregroundColor(.crGold)
-                
-                Text("Storage Settings")
-                    .font(.system(size: 22, weight: .heavy))
-                    .foregroundColor(.white)
-                
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
-            
-            VStack(spacing: 16) {
-                HStack {
-                    Text("Maximum Recent Broadcasts")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
-                    
-                    Spacer()
-                    
-                    Picker("", selection: $maxBroadcasts) {
-                        ForEach(broadcastRangeOptions, id: \.self) { number in
-                            Text("\(number)").tag(number)
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-                    .background(
-                        Capsule()
-                            .fill(Color.crNavy.opacity(0.7))
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(Color.crGold.opacity(0.5), lineWidth: 1)
-                            )
-                    )
-                    .padding(.trailing, 8)
-                }
-                
-                Text("Sets how many recent broadcast recordings to keep. When this limit is reached, oldest recordings will be automatically deleted to free up space.")
-                    .font(.system(size: 16))
-                    .foregroundColor(.white.opacity(0.8))
-                    .padding(.bottom, 8)
-                
-                HStack {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: "tv.fill")
-                                .foregroundColor(.crGold)
-                            Text("Current Broadcasts:")
-                                .foregroundColor(.white.opacity(0.9))
-                            Text("\(storageManager.broadcasts.count)")
-                                .foregroundColor(.crGold)
-                                .fontWeight(.bold)
-                        }
-                        
-                        if let oldestBroadcast = storageManager.broadcasts.last {
-                            HStack {
-                                Image(systemName: "calendar")
-                                    .foregroundColor(.crGold)
-                                Text("Oldest Recording:")
-                                    .foregroundColor(.white.opacity(0.9))
-                                Text(oldestBroadcast.formattedDate)
-                                    .foregroundColor(.crGold)
-                                    .fontWeight(.bold)
-                            }
-                        }
-                    }
-                    .font(.system(size: 15))
-                }
-                .padding(.vertical, 10)
-                .padding(.horizontal, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black.opacity(0.2))
-                )
-            }
-            .padding(20)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.crNavy.opacity(0.8))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .strokeBorder(Color.crGold, lineWidth: 2)
-                    )
-            )
-            .padding(.horizontal, 12)
-        }
-        .padding(.bottom, 20)
-    }
-    
+
     // MARK: - About Section
     
     private var aboutSection: some View {

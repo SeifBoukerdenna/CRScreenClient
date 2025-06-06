@@ -4,7 +4,6 @@ import ReplayKit
 
 struct ContentView: View {
     @StateObject private var bm = BroadcastManager()
-    @StateObject private var pipManager = PiPManager()
     @State private var broadcastButton: UIButton?
     @State private var player = AVPlayer()
     @State private var isVideoPrepared = false
@@ -22,39 +21,39 @@ struct ContentView: View {
             
             VStack(spacing: 28) {
                 // Player View for PiP (hidden when not broadcasting)
-                if bm.isBroadcasting {
-                    if isVideoPrepared {
-                        PlayerView(player: player) { layer in
-                            if Constants.FeatureFlags.enablePictureInPicture {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                    pipManager.setup(with: layer)
-                                }
-                            }
-                        }
-                        .frame(height: UIScreen.main.bounds.height * 1.5) // Changed from fixed 200 to 80% of screen height
-                        .cornerRadius(Constants.UI.cornerRadius)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Constants.UI.cornerRadius)
-                                .stroke(Color.crGold, lineWidth: 2)
-                        )
-                        .padding(.horizontal)
-                    } else {
-                        // Placeholder until video is prepared
-                        Rectangle()
-                            .fill(Color.black.opacity(0.8))
-                            .frame(height: UIScreen.main.bounds.height * 1.5)
-                            .cornerRadius(12)
-                            .overlay(
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.crGold, lineWidth: 2)
-                            )
-                            .padding(.horizontal)
-                    }
-                }
+//                if bm.isBroadcasting {
+//                    if isVideoPrepared {
+//                        PlayerView(player: player) { layer in
+//                            if Constants.FeatureFlags.enablePictureInPicture {
+//                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+//                                    pipManager.setup(with: layer)
+//                                }
+//                            }
+//                        }
+//                        .frame(height: UIScreen.main.bounds.height * 1.5) // Changed from fixed 200 to 80% of screen height
+//                        .cornerRadius(Constants.UI.cornerRadius)
+//                        .overlay(
+//                            RoundedRectangle(cornerRadius: Constants.UI.cornerRadius)
+//                                .stroke(Color.crGold, lineWidth: 2)
+//                        )
+//                        .padding(.horizontal)
+//                    } else {
+//                        // Placeholder until video is prepared
+//                        Rectangle()
+//                            .fill(Color.black.opacity(0.8))
+//                            .frame(height: UIScreen.main.bounds.height * 1.5)
+//                            .cornerRadius(12)
+//                            .overlay(
+//                                ProgressView()
+//                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+//                            )
+//                            .overlay(
+//                                RoundedRectangle(cornerRadius: 12)
+//                                    .stroke(Color.crGold, lineWidth: 2)
+//                            )
+//                            .padding(.horizontal)
+//                    }
+//                }
                 
                 // LIVE / OFFLINE pills
                 HStack(spacing: 12) {
@@ -111,28 +110,28 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 
                 // PiP Button (only shown when broadcasting and video is prepared)
-                if bm.isBroadcasting && isVideoPrepared {
-                    Button(action: {
-                        pipManager.togglePiP()
-                    }) {
-                        Label(
-                            pipManager.isPiPActive ? "Exit Picture-in-Picture" : "Enter Picture-in-Picture",
-                            systemImage: pipManager.isPiPActive ? "pip.exit" : "pip.enter"
-                        )
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(
-                            Capsule()
-                                .fill(Color.crPurple)
-                                .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
-                        )
-                    }
-                    .disabled(!pipManager.isPiPPossible)
-                    .opacity(pipManager.isPiPPossible ? 1.0 : 0.5)
-                    .padding(.top, 10)
-                }
+//                if bm.isBroadcasting && isVideoPrepared {
+//                    Button(action: {
+//                        pipManager.togglePiP()
+//                    }) {
+//                        Label(
+//                            pipManager.isPiPActive ? "Exit Picture-in-Picture" : "Enter Picture-in-Picture",
+//                            systemImage: pipManager.isPiPActive ? "pip.exit" : "pip.enter"
+//                        )
+//                        .font(.system(size: 18, weight: .semibold))
+//                        .foregroundColor(.white)
+//                        .padding(.horizontal, 20)
+//                        .padding(.vertical, 12)
+//                        .background(
+//                            Capsule()
+//                                .fill(Color.crPurple)
+//                                .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+//                        )
+//                    }
+//                    .disabled(!pipManager.isPiPPossible)
+//                    .opacity(pipManager.isPiPPossible ? 1.0 : 0.5)
+//                    .padding(.top, 10)
+//                }
             }
             .padding(.horizontal)
         }

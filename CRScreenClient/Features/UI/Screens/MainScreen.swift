@@ -21,7 +21,6 @@ extension View {
 
 struct MainScreen: View {
     @StateObject private var broadcastManager = BroadcastManager()
-    @StateObject private var pipManager = PiPManager()
     @StateObject private var connectionMonitor: ConnectionMonitor
     @State private var broadcastButton: UIButton?
     @State private var player = AVPlayer()
@@ -116,10 +115,6 @@ struct MainScreen: View {
                 SettingsScreen(storageManager: broadcastManager.storageManager, appVersion: appVersion)
             }
             .withSheetWatermark()
-        }
-        .fullScreenCover(isPresented: $showRecentBroadcasts) {
-            RecentBroadcastsScreen(storageManager: broadcastManager.storageManager)
-                .withSheetWatermark()
         }
         .sheet(isPresented: $showDebugMenu) {
             NavigationView {
@@ -318,38 +313,6 @@ struct MainScreen: View {
             }
             .buttonStyle(.plain)
             
-            // Recent Broadcasts button
-            Button(action: {
-                broadcastManager.storageManager.refreshBroadcasts()
-                showRecentBroadcasts = true
-            }) {
-                HStack(spacing: 10) {
-                    Image(systemName: "list.bullet")
-                        .font(.system(size: 18))
-                    Text("Recent Broadcasts")
-                        .font(.system(size: 18, weight: .semibold))
-                }
-                .foregroundColor(.white)
-                .padding(.vertical, 14)
-                .frame(maxWidth: .infinity)
-                .background(
-                    Capsule()
-                        .fill(Color.crPurple)
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [.crPurpleLight, .crPurple.opacity(0.7)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 2
-                                )
-                        )
-                        .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 3)
-                )
-            }
-            .buttonStyle(ClashRoyaleButtonStyle())
             
             // Version number at bottom
             Text(appVersion)
@@ -618,9 +581,9 @@ struct MainScreen: View {
         isVideoPrepared = false
         
         // Stop PiP if active
-        if pipManager.isPiPActive {
-            pipManager.stopPiP()
-        }
+//        if pipManager.isPiPActive {
+//            pipManager.stopPiP()
+//        }
     }
 }
 
