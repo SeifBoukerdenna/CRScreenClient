@@ -1,147 +1,154 @@
-// CRScreenClient/Core/Debug/DebugSettings.swift
 import Foundation
-import Combine
+import SwiftUI
 
-/// Debug settings model that stores and persists app debug configurations
+@available(iOS 14.0, *)
 class DebugSettings: ObservableObject {
-    // MARK: - Published Properties
     
-    /// Custom server URL for broadcasting and WebRTC signaling
+    // MARK: - Properties
+    private let defaults = UserDefaults(suiteName: AppGroup.identifier)
+    
     @Published var customServerURL: String {
         didSet {
-            saveSettings()
+            defaults?.set(customServerURL, forKey: Keys.customServerURL)
         }
     }
     
-    /// Whether to use the custom server URL instead of the default
     @Published var useCustomServer: Bool {
         didSet {
-            saveSettings()
+            defaults?.set(useCustomServer, forKey: Keys.useCustomServer)
         }
     }
     
-    /// Whether to show the video preview during broadcasting
     @Published var disableVideoPreview: Bool {
         didSet {
-            saveSettings()
+            defaults?.set(disableVideoPreview, forKey: Keys.disableVideoPreview)
         }
     }
     
-    /// Whether to disable local recording during broadcast
     @Published var disableLocalRecording: Bool {
         didSet {
-            saveSettings()
+            defaults?.set(disableLocalRecording, forKey: Keys.disableLocalRecording)
         }
     }
     
-    /// Whether debug mode is enabled
     @Published var debugModeEnabled: Bool {
         didSet {
-            saveSettings()
+            defaults?.set(debugModeEnabled, forKey: Keys.debugModeEnabled)
         }
     }
     
-    /// Server connection protocol preference
+    // Updated to default to secure connections for api.tormentor.dev
     @Published var preferSecureConnection: Bool {
         didSet {
-            saveSettings()
+            defaults?.set(preferSecureConnection, forKey: Keys.preferSecureConnection)
         }
     }
     
-    /// Custom port number for server connection
+    // Updated default port for HTTPS/WSS
     @Published var customPort: String {
         didSet {
-            saveSettings()
+            defaults?.set(customPort, forKey: Keys.customPort)
         }
     }
     
-    /// Whether to show the app watermark (ALWAYS ON BY DEFAULT)
     @Published var showWatermark: Bool {
         didSet {
-            saveSettings()
+            defaults?.set(showWatermark, forKey: Keys.showWatermark)
         }
     }
     
     // MARK: - Computed Properties
     
-    /// The effective server URL to use for broadcasting
     var effectiveServerURL: String {
         if useCustomServer && !customServerURL.isEmpty {
             return formatServerURL(customServerURL)
         }
-        return "Default Server (35.208.133.112:8080)"
+        // Return the new secure default
+        return "https://api.tormentor.dev:443"
     }
     
-    /// The effective WebRTC signaling URL
     var effectiveWebRTCURL: String {
         if useCustomServer && !customServerURL.isEmpty {
-            let formattedURL = formatServerURL(customServerURL)
-            if formattedURL.hasPrefix("http") {
-                return formattedURL.replacingOccurrences(of: "http", with: "ws")
+            let baseURL = formatServerURL(customServerURL)
+            let protocol_url = preferSecureConnection ? "wss://" : "ws://"
+            
+            // Remove http/https prefix and add ws/wss
+            var cleanURL = baseURL
+            if cleanURL.hasPrefix("https://") {
+                cleanURL = String(cleanURL.dropFirst(8))
+            } else if cleanURL.hasPrefix("http://") {
+                cleanURL = String(cleanURL.dropFirst(7))
             }
-            return formattedURL
+            
+            return "\(protocol_url)\(cleanURL)/ws"
         }
-        return "Default WebRTC Server (ws://35.208.133.112:8080/ws)"
+        // Return the new secure default WebSocket URL
+        return "wss://api.tormentor.dev:443/ws"
     }
     
     // MARK: - Initialization
     
     init() {
-        // Load saved values or use defaults
-        self.customServerURL = UserDefaults.standard.string(forKey: Keys.customServerURL) ?? ""
-        self.useCustomServer = UserDefaults.standard.bool(forKey: Keys.useCustomServer)
-        self.disableVideoPreview = UserDefaults.standard.bool(forKey: Keys.disableVideoPreview)
-        self.disableLocalRecording = UserDefaults.standard.bool(forKey: Keys.disableLocalRecording)
-        self.debugModeEnabled = UserDefaults.standard.bool(forKey: Keys.debugModeEnabled)
-        self.preferSecureConnection = UserDefaults.standard.bool(forKey: Keys.preferSecureConnection)
-        self.customPort = UserDefaults.standard.string(forKey: Keys.customPort) ?? "8080"
+        // Load with secure defaults for api.tormentor.dev
+        customServerURL = defaults?.string(forKey: Keys.customServerURL) ?? ""
+        useCustomServer = defaults?.bool(forKey: Keys.useCustomServer) ?? false
+        disableVideoPreview = defaults?.bool(forKey: Keys.disableVideoPreview) ?? false
+        disableLocalRecording = defaults?.bool(forKey: Keys.disableLocalRecording) ?? false
+        debugModeEnabled = defaults?.bool(forKey: Keys.debugModeEnabled) ?? false
+        // Default to secure connections for your secure server
+        preferSecureConnection = defaults?.bool(forKey: Keys.preferSecureConnection) ?? true
+        // Default to HTTPS/WSS port
+        customPort = defaults?.string(forKey: Keys.customPort) ?? "443"
+        showWatermark = defaults?.bool(forKey: Keys.showWatermark) ?? true
         
-        // Watermark is ON by default (security feature)
-        if UserDefaults.standard.object(forKey: Keys.showWatermark) == nil {
-            // First time - default to ON
-            self.showWatermark = true
-            UserDefaults.standard.set(true, forKey: Keys.showWatermark)
-        } else {
-            self.showWatermark = UserDefaults.standard.bool(forKey: Keys.showWatermark)
-        }
-    }
-    
-    // MARK: - Private Methods
-    
-    private func saveSettings() {
-        UserDefaults.standard.set(customServerURL, forKey: Keys.customServerURL)
-        UserDefaults.standard.set(useCustomServer, forKey: Keys.useCustomServer)
-        UserDefaults.standard.set(disableVideoPreview, forKey: Keys.disableVideoPreview)
-        UserDefaults.standard.set(disableLocalRecording, forKey: Keys.disableLocalRecording)
-        UserDefaults.standard.set(debugModeEnabled, forKey: Keys.debugModeEnabled)
-        UserDefaults.standard.set(preferSecureConnection, forKey: Keys.preferSecureConnection)
-        UserDefaults.standard.set(customPort, forKey: Keys.customPort)
-        UserDefaults.standard.set(showWatermark, forKey: Keys.showWatermark)
-        
-        // Also save critical settings to app group for broadcast extension access
-        let groupDefaults = UserDefaults(suiteName: Constants.Broadcast.groupID)
-        groupDefaults?.set(useCustomServer, forKey: Keys.useCustomServer)
-        groupDefaults?.set(customServerURL, forKey: Keys.customServerURL)
-        groupDefaults?.set(disableLocalRecording, forKey: Keys.disableLocalRecording)
-        groupDefaults?.set(preferSecureConnection, forKey: Keys.preferSecureConnection)
-        groupDefaults?.set(customPort, forKey: Keys.customPort)
-        
-        // For debugging
+        // Log the initial configuration
         if Constants.FeatureFlags.enableDebugLogging {
-            print("Debug settings saved: useCustomServer=\(useCustomServer), customURL=\(effectiveServerURL)")
-            print("WebRTC URL: \(effectiveWebRTCURL)")
-            print("Watermark enabled: \(showWatermark)")
+            print("🔧 DebugSettings initialized:")
+            print("  🔒 Secure by default: \(preferSecureConnection)")
+            print("  🌐 Effective URL: \(effectiveServerURL)")
+            print("  📡 WebSocket URL: \(effectiveWebRTCURL)")
         }
     }
+    
+    // MARK: - Helper Methods
     
     private func formatServerURL(_ url: String) -> String {
         var formattedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Handle port addition if specified
-        if !customPort.isEmpty && customPort != "8080" && !formattedURL.contains(":") {
-            // Add port only if it's not already in the URL
-            if formattedURL.contains("localhost") || formattedURL.contains("127.0.0.1") || formattedURL.contains("192.168.") {
+        // Remove trailing slash
+        if formattedURL.hasSuffix("/") {
+            formattedURL = String(formattedURL.dropLast())
+        }
+        
+        // Add protocol if missing - default to secure
+        if !formattedURL.hasPrefix("http://") && !formattedURL.hasPrefix("https://") {
+            formattedURL = preferSecureConnection ? "https://\(formattedURL)" : "http://\(formattedURL)"
+        }
+        
+        // Add port if specified and not already present
+        if !customPort.isEmpty && customPort != "80" && customPort != "443" {
+            // Check if port is already in URL
+            let urlComponents = formattedURL.components(separatedBy: ":")
+            if urlComponents.count == 2 { // Only protocol, no port
                 formattedURL += ":\(customPort)"
+            } else if urlComponents.count == 3 {
+                // Replace existing port
+                let protocolAndHost = "\(urlComponents[0]):\(urlComponents[1])"
+                formattedURL = "\(protocolAndHost):\(customPort)"
+            }
+        } else if customPort == "443" && formattedURL.hasPrefix("https://") {
+            // Standard HTTPS port - no need to specify
+            // Keep as is
+        } else if customPort == "80" && formattedURL.hasPrefix("http://") {
+            // Standard HTTP port - no need to specify
+            // Keep as is
+        } else if !customPort.isEmpty && !formattedURL.contains(":") {
+            // Add port if specified
+            if let range = formattedURL.range(of: "://") {
+                let afterProtocol = formattedURL[range.upperBound...]
+                if !afterProtocol.contains(":") {
+                    formattedURL += ":\(customPort)"
+                }
             }
         }
         
@@ -168,17 +175,23 @@ class DebugSettings: ObservableObject {
         useCustomServer = false
         disableVideoPreview = false
         disableLocalRecording = false
-        preferSecureConnection = false
-        customPort = "8080"
+        // Default to secure connections for api.tormentor.dev
+        preferSecureConnection = true
+        // Default to HTTPS/WSS port
+        customPort = "443"
         // IMPORTANT: Keep watermark ON even after reset for security
         showWatermark = true
         // Leave debug mode enabled since they're in the debug menu
+        
+        print("🔄 Debug settings reset to secure defaults")
+        print("  🔒 Secure connection: \(preferSecureConnection)")
+        print("  🔌 Default port: \(customPort)")
     }
     
     /// Validates the current server URL format
     func validateServerURL() -> (isValid: Bool, message: String) {
         guard useCustomServer && !customServerURL.isEmpty else {
-            return (true, "Using default server")
+            return (true, "Using secure default server (api.tormentor.dev:443)")
         }
         
         let trimmedURL = customServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -194,8 +207,23 @@ class DebugSettings: ObservableObject {
         }
         
         // Check for protocol conflicts
-        if (trimmedURL.hasPrefix("http") && preferSecureConnection) {
+        if (trimmedURL.hasPrefix("http://") && preferSecureConnection) {
             return (false, "HTTP URL with secure connection preference - consider using HTTPS")
+        }
+        
+        // Validate port
+        if !customPort.isEmpty {
+            if let port = Int(customPort) {
+                if port < 1 || port > 65535 {
+                    return (false, "Port must be between 1 and 65535")
+                }
+                // Warn about common secure ports
+                if preferSecureConnection && port != 443 && port != 8443 {
+                    return (true, "Non-standard port for secure connection")
+                }
+            } else {
+                return (false, "Invalid port number")
+            }
         }
         
         return (true, "Server URL format appears valid")
@@ -211,7 +239,31 @@ class DebugSettings: ObservableObject {
             "preferSecureConnection": preferSecureConnection,
             "customPort": customPort,
             "showWatermark": showWatermark,
-            "isValidURL": validateServerURL().isValid
+            "isValidURL": validateServerURL().isValid,
+            "isSecureDefault": !useCustomServer && preferSecureConnection
         ]
+    }
+    
+    /// Quick setup for api.tormentor.dev
+    func setupForSecureServer() {
+        useCustomServer = false
+        preferSecureConnection = true
+        customPort = "443"
+        
+        print("🔧 Configured for secure api.tormentor.dev server")
+        print("  🌐 URL: \(effectiveServerURL)")
+        print("  📡 WebSocket: \(effectiveWebRTCURL)")
+    }
+    
+    /// Check if current configuration is using the secure default
+    var isUsingSecureDefault: Bool {
+        return !useCustomServer && preferSecureConnection
+    }
+}
+
+// MARK: - AppGroup Helper
+extension DebugSettings {
+    enum AppGroup {
+        static let identifier = "group.coreradiant.crscreenclient"
     }
 }

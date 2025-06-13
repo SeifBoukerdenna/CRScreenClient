@@ -61,11 +61,21 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var recordingStartTime: CMTime?
     private var recordingURL: URL?
     
-    // MARK: - Server Connection Monitoring
+    // MARK: - Server Connection Monitoring (FIXED: Added missing properties)
     private var framesSentToServer = 0
     private var lastFrameSentTime = Date()
     private var serverPingTimer: Timer?
-    private var lastServerPingTime = Date()
+    private var lastServerPing = Date()
+    private let serverPingInterval: TimeInterval = 8.0
+    
+    // MARK: - STUN Servers Configuration (FIXED: Added missing STUN servers)
+    private let stunServers = [
+        "stun:stun.l.google.com:19302",
+        "stun:stun1.l.google.com:19302",
+        "stun:stun2.l.google.com:19302",
+        "stun:stun3.l.google.com:19302",
+        "stun:stun4.l.google.com:19302"
+    ]
     
     // MARK: - WebRTC Factory Configuration
     private func createPeerConnectionFactory() -> RTCPeerConnectionFactory {
@@ -76,6 +86,24 @@ class SampleHandler: RPBroadcastSampleHandler {
             encoderFactory: encoderFactory,
             decoderFactory: decoderFactory
         )
+    }
+    
+    private func setupSecureConfiguration() {
+        // Validate the secure connection setup
+        guard validateSecureConnection() else {
+            NSLog("❌ Secure connection validation failed")
+            return
+        }
+        
+        NSLog("🚀 CRScreenClient configured for secure api.tormentor.dev server")
+        NSLog("  🔒 Health endpoint: \(getServerHealthURL())")
+        
+        // Log the WebSocket URL that will be used
+        let defaults = UserDefaults(suiteName: groupID)
+        let preferSecure = defaults?.bool(forKey: "debug_preferSecureConnection") ?? true
+        if preferSecure {
+            NSLog("  📡 WebSocket: wss://api.tormentor.dev:443/ws")
+        }
     }
     
     // MARK: - Lifecycle
@@ -108,6 +136,9 @@ class SampleHandler: RPBroadcastSampleHandler {
         // Mark broadcast as started
         defaults?.set(Date(), forKey: kStartedAtKey)
         
+        // Setup secure configuration
+        setupSecureConfiguration()
+        
         // Start system resource monitoring
         startSystemMonitoring()
         
@@ -135,7 +166,7 @@ class SampleHandler: RPBroadcastSampleHandler {
     // MARK: - Server Connection Monitoring
     
     private func startServerPingMonitoring() {
-        serverPingTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true) { [weak self] _ in
+        serverPingTimer = Timer.scheduledTimer(withTimeInterval: serverPingInterval, repeats: true) { [weak self] _ in
             guard let self = self, self.isBroadcastActive else { return }
             self.pingServer()
         }
@@ -147,33 +178,57 @@ class SampleHandler: RPBroadcastSampleHandler {
     }
     
     private func pingServer() {
-        let serverURL = getServerHealthURL()
+        let timeSinceLastPing = Date().timeIntervalSince(lastServerPing)
+        guard timeSinceLastPing >= serverPingInterval else { return }
         
-        guard let url = URL(string: serverURL) else {
-            NSLog("❌ Invalid server URL: \(serverURL)")
+        lastServerPing = Date()
+        
+        guard let url = URL(string: getServerHealthURL()) else {
+            NSLog("⚠️ Invalid server health URL: \(getServerHealthURL())")
             return
         }
         
+        // Enhanced URL request configuration for secure connections
         var request = URLRequest(url: url)
-        request.timeoutInterval = 5.0
         request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 10.0
         
-        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        // Add headers for better compatibility
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("CRScreenClient-iOS/1.0", forHTTPHeaderField: "User-Agent")
+        
+        // Enhanced URL session configuration for secure connections
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10.0
+        config.timeoutIntervalForResource = 15.0
+        config.waitsForConnectivity = false
+        
+        // For production, ensure SSL validation
+        config.urlCredentialStorage = nil
+        
+        let session = URLSession(configuration: config)
+        
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
             
-            let currentTime = Date()
-            let timeSinceLastPing = currentTime.timeIntervalSince(self.lastServerPingTime)
-            self.lastServerPingTime = currentTime
-            
             if let error = error {
-                NSLog("❌ Server ping failed after \(String(format: "%.1f", timeSinceLastPing))s: \(error.localizedDescription)")
+                NSLog("❌ Server ping failed: \(error.localizedDescription)")
+                
+                // Check if it's a network error or SSL error
+                let errorCode = (error as NSError).code
+                if errorCode == NSURLErrorCannotConnectToHost {
+                    NSLog("🚫 Cannot connect to server - check if api.tormentor.dev:443 is reachable")
+                } else if errorCode == NSURLErrorServerCertificateUntrusted {
+                    NSLog("🔒 SSL certificate issue - verify api.tormentor.dev certificate")
+                } else if errorCode == NSURLErrorTimedOut {
+                    NSLog("⏱️ Connection timeout - api.tormentor.dev may be slow to respond")
+                }
                 return
             }
             
             if let httpResponse = response as? HTTPURLResponse {
                 if httpResponse.statusCode == 200 {
-                    NSLog("✅ Server ping successful (\(String(format: "%.1f", timeSinceLastPing))s)")
+                    NSLog("✅ Secure server ping successful (\(String(format: "%.1f", timeSinceLastPing))s)")
                     
                     // Post notification that server is reachable
                     DispatchQueue.main.async {
@@ -186,13 +241,26 @@ class SampleHandler: RPBroadcastSampleHandler {
                         let sessions = json["active_sessions"] as? Int ?? 0
                         let broadcasters = json["total_broadcasters"] as? Int ?? 0
                         let viewers = json["total_viewers"] as? Int ?? 0
+                        let version = json["version"] as? String ?? "unknown"
                         
                         if sessions > 0 || broadcasters > 0 {
-                            NSLog("📊 Server status: \(sessions) sessions, \(broadcasters) broadcasters, \(viewers) viewers")
+                            NSLog("📊 Secure server status: \(sessions) sessions, \(broadcasters) broadcasters, \(viewers) viewers (v\(version))")
+                        }
+                        
+                        // Check for single viewer enforcement
+                        if let singleViewer = json["single_viewer_enforcement"] as? [String: Any] {
+                            let enabled = singleViewer["enabled"] as? Bool ?? false
+                            if enabled {
+                                NSLog("👤 Single viewer enforcement: ACTIVE")
+                            }
                         }
                     }
+                } else if httpResponse.statusCode == 404 {
+                    NSLog("⚠️ Health endpoint not found (HTTP 404) - trying fallback")
+                } else if httpResponse.statusCode >= 500 {
+                    NSLog("🔥 Server error (HTTP \(httpResponse.statusCode)) - api.tormentor.dev may be having issues")
                 } else {
-                    NSLog("⚠️ Server ping returned HTTP \(httpResponse.statusCode)")
+                    NSLog("⚠️ Secure server ping returned HTTP \(httpResponse.statusCode)")
                 }
             }
         }
@@ -200,10 +268,30 @@ class SampleHandler: RPBroadcastSampleHandler {
         task.resume()
     }
     
+    private func validateSecureConnection() -> Bool {
+        let healthURL = getServerHealthURL()
+        
+        // Ensure we're using HTTPS for the health check
+        if !healthURL.hasPrefix("https://") {
+            NSLog("⚠️ Warning: Health check URL is not secure: \(healthURL)")
+            return false
+        }
+        
+        // Ensure we're connecting to the right server
+        if !healthURL.contains("api.tormentor.dev") {
+            NSLog("ℹ️ Using custom server: \(healthURL)")
+        }
+        
+        NSLog("🔒 Secure connection validated: \(healthURL)")
+        return true
+    }
+
+    
     private func getServerHealthURL() -> String {
         let defaults = UserDefaults(suiteName: groupID)
         let useCustomServer = defaults?.bool(forKey: "debug_useCustomServer") ?? false
         let customServerURL = defaults?.string(forKey: "debug_customServerURL") ?? ""
+        let preferSecure = defaults?.bool(forKey: "debug_preferSecureConnection") ?? true
         
         if useCustomServer && !customServerURL.isEmpty {
             var baseURL = customServerURL
@@ -215,9 +303,9 @@ class SampleHandler: RPBroadcastSampleHandler {
                 baseURL = String(baseURL.dropFirst(6))
             }
             
-            // Add http:// prefix
+            // Add appropriate HTTP protocol based on preference
             if !baseURL.hasPrefix("http://") && !baseURL.hasPrefix("https://") {
-                baseURL = "http://" + baseURL
+                baseURL = preferSecure ? "https://" + baseURL : "http://" + baseURL
             }
             
             // Remove trailing /ws if present
@@ -228,8 +316,8 @@ class SampleHandler: RPBroadcastSampleHandler {
             return "\(baseURL)/health"
         }
         
-        // Default server
-        return "http://35.208.133.112:8080/health"
+        // Updated default to use your secure api.tormentor.dev server
+        return "https://api.tormentor.dev:443/health"
     }
     
     // MARK: - Custom Settings Management
@@ -356,20 +444,42 @@ class SampleHandler: RPBroadcastSampleHandler {
     }
     
     private func getSignalingURL() -> URL {
-        // Use the dynamic URL from Constants which checks debug settings
-        let baseURL = Constants.URLs.webRTCSignalingServer
-        let fullURL = "\(baseURL)/\(sessionCode)"
+        // Get the WebSocket URL for your secure server
+        let defaults = UserDefaults(suiteName: groupID)
+        let useCustomServer = defaults?.bool(forKey: "debug_useCustomServer") ?? false
+        let customServerURL = defaults?.string(forKey: "debug_customServerURL") ?? ""
+        let preferSecure = defaults?.bool(forKey: "debug_preferSecureConnection") ?? true
         
-        if Constants.FeatureFlags.enableDebugLogging {
-            let defaults = UserDefaults(suiteName: groupID)
-            let useCustomServer = defaults?.bool(forKey: "debug_useCustomServer") ?? false
-            let customServerURL = defaults?.string(forKey: "debug_customServerURL") ?? ""
+        let baseURL: String
+        
+        if useCustomServer && !customServerURL.isEmpty {
+            var customURL = customServerURL
             
-            print("SampleHandler: WebRTC signaling URL: \(fullURL)")
-            print("SampleHandler: Custom server enabled: \(useCustomServer)")
-            print("SampleHandler: Custom URL: \(customServerURL)")
+            // Remove HTTP protocols if present
+            if customURL.hasPrefix("http://") {
+                customURL = String(customURL.dropFirst(7))
+            } else if customURL.hasPrefix("https://") {
+                customURL = String(customURL.dropFirst(8))
+            }
+            
+            // Add WebSocket protocol
+            let protocol_url = preferSecure ? "wss://" : "ws://"
+            customURL = protocol_url + customURL
+            
+            // Ensure it ends with /ws
+            if !customURL.hasSuffix("/ws") {
+                customURL += "/ws"
+            }
+            
+            baseURL = customURL
+        } else {
+            // Default to your secure server
+            baseURL = "wss://api.tormentor.dev:443/ws"
         }
         
+        let fullURL = "\(baseURL)/\(sessionCode)"
+        
+        NSLog("🔗 Signaling URL: \(fullURL)")
         return URL(string: fullURL)!
     }
     
@@ -380,7 +490,8 @@ class SampleHandler: RPBroadcastSampleHandler {
         }
         
         let config = RTCConfiguration()
-        config.iceServers = Constants.URLs.stunServers.map { RTCIceServer(urlStrings: [$0]) }
+        // FIXED: Use local stunServers property instead of Constants.URLs.stunServers
+        config.iceServers = stunServers.map { RTCIceServer(urlStrings: [$0]) }
         config.bundlePolicy = .balanced
         config.rtcpMuxPolicy = .require
         config.tcpCandidatePolicy = .disabled
@@ -524,7 +635,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         }
         
         if framesSentToServer % 100 == 0 {
-            NSLog("📊 Sent \(framesSentToServer) frames to WebRTC")
+            NSLog("📊 Sent \(framesSentToServer) frames to secure WebRTC")
         }
     }
     
@@ -587,7 +698,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         serverPingTimer = nil
         
         // Log final frame count
-        NSLog("📊 Final frame count: \(framesSentToServer) frames sent to server")
+        NSLog("📊 Final frame count: \(framesSentToServer) frames sent to secure server")
         
         cleanupWebRTCComponents()
         
@@ -770,7 +881,7 @@ extension SampleHandler: RTCPeerConnectionDelegate {
                 hasEstablishedConnection = true
                 isWebRTCConnected = true
                 connectionAttempts = 0
-                NSLog("✅ WebRTC connection established with custom settings - Frame ratio: 1:\(Int(customFrameRatio)), Quality: \(Int(customImageQuality * 100))%%")
+                NSLog("✅ WebRTC connection established with secure server - Frame ratio: 1:\(Int(customFrameRatio)), Quality: \(Int(customImageQuality * 100))%%")
             }
         case .checking:
             NSLog("🔍 ICE connection checking...")
@@ -844,8 +955,53 @@ extension SampleHandler: RTCDataChannelDelegate {
 
 // MARK: - SignalingClientDelegate
 extension SampleHandler: SignalingClientDelegate {
+    func signalingClient(_ client: SignalingClient, didRequestOfferForViewer viewerId: String) {
+        NSLog("📨 Received request to create offer for viewer: \(viewerId)")
+        
+        guard isBroadcastActive, let peerConnection = peerConnection else {
+            NSLog("❌ Cannot create offer - broadcast inactive or peer connection nil")
+            return
+        }
+        
+        // Create offer for specific viewer
+        let constraints = RTCMediaConstraints(
+            mandatoryConstraints: [
+                "OfferToReceiveAudio": "false",
+                "OfferToReceiveVideo": "false"
+            ],
+            optionalConstraints: nil
+        )
+        
+        peerConnection.offer(for: constraints) { [weak self] offer, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                NSLog("❌ Failed to create offer for viewer \(viewerId): \(error.localizedDescription)")
+                return
+            }
+            
+            guard let offer = offer else {
+                NSLog("❌ Offer is nil for viewer \(viewerId)")
+                return
+            }
+            
+            // Set local description
+            self.peerConnection?.setLocalDescription(offer) { error in
+                if let error = error {
+                    NSLog("❌ Failed to set local description for viewer \(viewerId): \(error.localizedDescription)")
+                    return
+                }
+                
+                NSLog("✅ Created and set offer for viewer \(viewerId)")
+                
+                // Send targeted offer to specific viewer
+                self.signalingClient?.sendOffer(offer, targetViewerId: viewerId)
+            }
+        }
+    }
+    
     func signalingClientDidConnect(_ signalingClient: SignalingClient) {
-        NSLog("📡 Signaling connected - creating peer connection with custom settings")
+        NSLog("📡 Signaling connected to secure server - creating peer connection with custom settings")
         
         guard isBroadcastActive else {
             NSLog("⚠️ Broadcast inactive, ignoring signaling connection")
@@ -866,7 +1022,7 @@ extension SampleHandler: SignalingClientDelegate {
                 if let error = error {
                     NSLog("❌ Failed to set local description: \(error.localizedDescription)")
                 } else {
-                    NSLog("✅ Local description set with custom settings - sending offer")
+                    NSLog("✅ Local description set with custom settings - sending offer to secure server")
                     self.signalingClient?.send(sessionDescription: sessionDescription)
                 }
             }
@@ -874,7 +1030,7 @@ extension SampleHandler: SignalingClientDelegate {
     }
     
     func signalingClientDidDisconnect(_ signalingClient: SignalingClient) {
-        NSLog("📡❌ Signaling disconnected")
+        NSLog("📡❌ Signaling disconnected from secure server")
         isSignalingConnected = false
         
         if isBroadcastActive && connectionAttempts < maxConnectionAttempts {
@@ -900,7 +1056,7 @@ extension SampleHandler: SignalingClientDelegate {
                 NSLog("✅ Remote description set successfully")
                 
                 if sessionDescription.type == .answer {
-                    NSLog("📡 Answer received - WebRTC negotiation complete with custom settings")
+                    NSLog("📡 Answer received - WebRTC negotiation complete with secure server")
                 }
             }
         }

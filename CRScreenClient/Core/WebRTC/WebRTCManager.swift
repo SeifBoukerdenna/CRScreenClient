@@ -291,6 +291,10 @@ extension WebRTCManager: SignalingClientDelegate {
         Logger.info("WebRTCManager: Signaling client connected as viewer", to: Logger.app)
         createPeerConnection()
     }
+    func signalingClient(_ client: SignalingClient, didRequestOfferForViewer viewerId: String) {
+        // This method is only relevant for broadcasters, not viewers
+        // Empty implementation for protocol compliance
+    }
     
     func signalingClientDidDisconnect(_ signalingClient: SignalingClient) {
         Logger.info("WebRTCManager: Signaling client disconnected", to: Logger.app)

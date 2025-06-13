@@ -177,7 +177,7 @@ struct ConnectionStatusView: View {
         if debugSettings.useCustomServer && !debugSettings.customServerURL.isEmpty {
             return debugSettings.customServerURL
         }
-        return "35.208.133.112:8080"
+        return "api.tormentor.dev:443"
     }
     
     private var statusColor: Color {
@@ -450,7 +450,7 @@ struct DetailedConnectionView: View {
             let protocol_URL = debugSettings.preferSecureConnection ? "https://" : "http://"
             return "\(protocol_URL)\(url)/health"
         }
-        return "http://35.208.133.112:8080/health"
+        return "http://api.tormentor.dev:443/health"
     }
     
     private func getWebRTCEndpoint() -> String {
@@ -466,7 +466,7 @@ struct DetailedConnectionView: View {
             }
             return "\(baseURL)/ws/[session]"
         }
-        return "ws://35.208.133.112:8080/ws/[session]"
+        return "ws://api.tormentor.dev:443/ws/[session]"
     }
     
     private var networkDiagnosticsSection: some View {

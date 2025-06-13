@@ -10,7 +10,7 @@
 		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
-			<key>35.208.133.112</key>
+			<key>api.tormentor.dev</key>
 			<dict>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
 				<true/>

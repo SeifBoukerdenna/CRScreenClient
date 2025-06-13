@@ -226,7 +226,7 @@ struct DebugMenuScreen: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
                     
-                    TextField("35.208.133.112 or myserver.com", text: $serverURL)
+                    TextField("api.tormentor.dev or myserver.com", text: $serverURL)
                         .font(.system(size: 16))
                         .padding(12)
                         .background(
@@ -272,7 +272,7 @@ struct DebugMenuScreen: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
                     
-                    TextField("8080", text: $customPort)
+                    TextField("443", text: $customPort)
                         .font(.system(size: 16))
                         .padding(12)
                         .background(
@@ -351,7 +351,7 @@ struct DebugMenuScreen: View {
                     
                     VStack(alignment: .leading, spacing: 8) {
                         connectionInfoRow("Protocol:", debugSettings.preferSecureConnection ? "Secure (WSS/HTTPS)" : "Standard (WS/HTTP)")
-                        connectionInfoRow("Port:", customPort.isEmpty ? "Default (8080)" : customPort)
+                        connectionInfoRow("Port:", customPort.isEmpty ? "Default (443)" : customPort)
                         connectionInfoRow("Status:", debugSettings.useCustomServer ? "Custom Server" : "Default Server")
                     }
                     .padding(.vertical, 10)

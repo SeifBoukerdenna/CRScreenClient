@@ -1,5 +1,5 @@
 //  CRScreenClient/Core/Network/ConnectionMonitor.swift
-//  Updated 2025-06-04 – always includes the correct port (8080/443)
+//  Updated 2025-06-04 – always includes the correct port (443/443)
 
 import Foundation
 import Combine
@@ -184,7 +184,7 @@ class ConnectionMonitor: ObservableObject {
         // 1. Start with either the custom value or default host
         var raw = debugSettings.useCustomServer && !debugSettings.customServerURL.isEmpty
                   ? debugSettings.customServerURL
-                  : "35.208.133.112:8080"
+                  : "api.tormentor.dev:443"
 
         // 2. Strip any leading scheme so we can rebuild cleanly
         if let range = raw.range(of: "://") { raw = String(raw[range.upperBound...]) }
@@ -196,7 +196,7 @@ class ConnectionMonitor: ObservableObject {
 
         // 4. Choose defaults if no explicit port
         let secure = debugSettings.preferSecureConnection
-        let port   = customPort ?? (secure ? 443 : 8080)
+        let port   = customPort ?? (secure ? 443 : 443)
 
         // 5. Build safely with URLComponents
         var c = URLComponents()

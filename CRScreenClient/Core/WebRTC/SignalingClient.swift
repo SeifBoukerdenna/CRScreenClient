@@ -7,6 +7,7 @@ protocol SignalingClientDelegate: AnyObject {
     func signalingClient(_ signalingClient: SignalingClient, didReceiveSessionDescription sessionDescription: RTCSessionDescription)
     func signalingClient(_ signalingClient: SignalingClient, didReceiveCandidate candidate: RTCIceCandidate)
     func signalingClient(_ signalingClient: SignalingClient, didReceiveError error: Error)
+    func signalingClient(_ client: SignalingClient, didRequestOfferForViewer viewerId: String)
 }
 
 class SignalingClient: NSObject {
@@ -285,6 +286,8 @@ class SignalingClient: NSObject {
                 handlePongMessage(json)
             case "error":
                 handleErrorMessage(json)
+            case "request_viewer_offer":
+                handleRequestViewerOffer(json)
             case "broadcaster_disconnected":
                 NSLog("SignalingClient: Broadcaster disconnected notification received")
                 // Don't disconnect, just notify delegate
@@ -350,6 +353,16 @@ class SignalingClient: NSObject {
         delegate?.signalingClient(self, didReceiveCandidate: iceCandidate)
     }
     
+    private func handleRequestViewerOffer(_ json: [String: Any]?) {
+        guard let viewerId = json?["viewer_id"] as? String else {
+            NSLog("SignalingClient: request_viewer_offer missing viewer_id")
+            return
+        }
+        
+        NSLog("SignalingClient: Received request to create offer for viewer: \(viewerId)")
+        delegate?.signalingClient(self, didRequestOfferForViewer: viewerId)
+    }
+    
     private func handlePongMessage(_ json: [String: Any]?) {
         lastPongReceived = Date()
         lastMessageTime = Date()
@@ -382,6 +395,24 @@ class SignalingClient: NSObject {
         ]
         
         NSLog("SignalingClient: Sending \(sessionDescription.type == .offer ? "offer" : "answer")")
+        sendMessage(message)
+    }
+    
+    func sendOffer(_ offer: RTCSessionDescription, targetViewerId: String? = nil) {
+        var message: [String: Any] = [
+            "type": "offer",
+            "sdp": offer.sdp,
+            "sessionCode": sessionCode,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        if let targetViewerId = targetViewerId {
+            message["target_viewer_id"] = targetViewerId
+            NSLog("SignalingClient: Sending targeted offer for viewer: \(targetViewerId)")
+        } else {
+            NSLog("SignalingClient: Sending broadcast offer")
+        }
+        
         sendMessage(message)
     }
     
