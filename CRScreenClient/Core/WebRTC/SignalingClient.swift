@@ -35,8 +35,9 @@ class SignalingClient: NSObject {
     // MARK: - Health Monitoring
     private var connectionStartTime: Date?
     private var lastMessageTime = Date()
-    private let messageTimeout: TimeInterval = 45.0
-    private let connectionHealthCheckInterval: TimeInterval = 20.0
+    private let messageTimeout: TimeInterval = 180  // INCREASED from 45.0 to 120.0 seconds
+    private let connectionHealthCheckInterval: TimeInterval = 60.0  // INCREASED from 20.0 to 45.0 seconds
+
     
     // MARK: - Initialization
     init(url: URL, sessionCode: String) {
@@ -61,7 +62,7 @@ class SignalingClient: NSObject {
     private func setupURLSession() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 8
-        config.timeoutIntervalForResource = 20
+        config.timeoutIntervalForResource = 300
         config.waitsForConnectivity = false
         urlSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
     }
@@ -165,6 +166,7 @@ class SignalingClient: NSObject {
             self.performHealthCheck()
         }
     }
+
     
     private func stopKeepAlive() {
         keepAliveTimer?.invalidate()
@@ -172,7 +174,7 @@ class SignalingClient: NSObject {
     }
     
     private func performHealthCheck() {
-        checkKeepAliveTimeout()
+        // REMOVED: checkKeepAliveTimeout() - this was too aggressive
         sendKeepAlive()
         
         if let startTime = connectionStartTime {
@@ -181,18 +183,11 @@ class SignalingClient: NSObject {
             
             NSLog("SignalingClient: Health check - Duration: \(Int(connectionDuration))s, Last message: \(Int(timeSinceLastMessage))s ago")
             
+            // MUCH more conservative timeout check
             if timeSinceLastMessage > messageTimeout && shouldMaintainConnection {
-                NSLog("SignalingClient: No recent activity - triggering reconnection")
+                NSLog("SignalingClient: No activity for \(Int(timeSinceLastMessage))s (timeout: \(Int(messageTimeout))s) - triggering reconnection")
                 handleConnectionFailure()
             }
-        }
-    }
-    
-    private func checkKeepAliveTimeout() {
-        let timeSinceLastPong = Date().timeIntervalSince(lastPongReceived)
-        if timeSinceLastPong > messageTimeout && shouldMaintainConnection {
-            NSLog("SignalingClient: Keep-alive timeout (\(Int(timeSinceLastPong))s) - triggering reconnection")
-            handleConnectionFailure()
         }
     }
     

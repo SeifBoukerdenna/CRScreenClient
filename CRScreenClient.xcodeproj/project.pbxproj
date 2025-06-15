@@ -491,7 +491,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = CRScreenClient/CRScreenClient.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"CRScreenClient/Preview Content\"";
 				DEVELOPMENT_TEAM = VZR89A8Z89;
 				ENABLE_PREVIEWS = YES;
@@ -510,7 +510,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1;
+				MARKETING_VERSION = 0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient;
 				PRODUCT_NAME = "Royal Trainer";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -527,7 +527,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = CRScreenClient/CRScreenClient.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"CRScreenClient/Preview Content\"";
 				DEVELOPMENT_TEAM = VZR89A8Z89;
 				ENABLE_PREVIEWS = YES;
@@ -546,7 +546,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1;
+				MARKETING_VERSION = 0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient;
 				PRODUCT_NAME = "Royal Trainer";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -561,7 +561,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = CRScreenClientBroadcast/CRScreenClientBroadcast.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = VZR89A8Z89;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CRScreenClientBroadcast/Info.plist;
@@ -572,7 +572,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient.Broadcast;
 				PRODUCT_NAME = "Royal Trainer Broadcast";
 				SKIP_INSTALL = YES;
@@ -588,7 +588,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = CRScreenClientBroadcast/CRScreenClientBroadcast.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = VZR89A8Z89;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CRScreenClientBroadcast/Info.plist;
@@ -599,7 +599,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient.Broadcast;
 				PRODUCT_NAME = "Royal Trainer Broadcast";
 				SKIP_INSTALL = YES;
@@ -614,7 +614,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = CRScreenClientBroadcastSetupUI/CRScreenClientBroadcastSetupUI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = VZR89A8Z89;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CRScreenClientBroadcastSetupUI/Info.plist;
@@ -625,7 +625,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient.BroadcastSetupUI;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -640,7 +640,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = CRScreenClientBroadcastSetupUI/CRScreenClientBroadcastSetupUI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = VZR89A8Z89;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CRScreenClientBroadcastSetupUI/Info.plist;
@@ -651,7 +651,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.elmelz.CRScreenClient.BroadcastSetupUI;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

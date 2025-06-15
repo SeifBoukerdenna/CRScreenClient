@@ -403,9 +403,9 @@ struct DebugMenuScreen: View {
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
                         
-                        Text("Prevents the broadcast extension from saving recordings locally")
+                        Text("ENABLED: No video recording, broadcast-only mode for optimal performance")
                             .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(.crGold) // Use gold color to indicate this is the recommended setting
                     }
                 }
                 .toggleStyle(SwitchToggleStyle(tint: .crGold))

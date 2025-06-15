@@ -119,7 +119,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         
         // Get session code and quality settings
         sessionCode = defaults?.string(forKey: kCodeKey) ?? "0000"
-        disableLocalRecording = defaults?.bool(forKey: "debug_disableLocalRecording") ?? false
+        disableLocalRecording = defaults?.bool(forKey: "debug_disableLocalRecording") ?? true  // DEFAULT TO TRUE
         
         if let savedQuality = defaults?.string(forKey: kQualityKey) {
             qualityLevel = savedQuality
@@ -145,22 +145,18 @@ class SampleHandler: RPBroadcastSampleHandler {
         // Start settings refresh timer to pick up real-time changes
         startSettingsRefreshTimer()
         
-        // Start server ping monitoring
-        startServerPingMonitoring()
+        // REMOVED: Start server ping monitoring - This was causing the 80s timeout!
+        // REMOVED: startServerPingMonitoring()
         
         // Initialize WebRTC with proper lifecycle management
         initializeWebRTCSession()
-        
-        // Setup local recording if enabled
-        if !disableLocalRecording {
-            setupLocalRecording()
-        }
+    
         
         // Reset frame counters
         framesSentToServer = 0
         lastFrameSentTime = Date()
         
-        NSLog("🚀 Broadcast started - Session: \(sessionCode), Custom Quality: \(Int(customImageQuality * 100))%, Frame Ratio: 1:\(Int(customFrameRatio)), Bitrate: \(Int(customBitrate/1000))k")
+        NSLog("🚀 Broadcast started - Session: \(sessionCode), Recording: \(disableLocalRecording ? "DISABLED" : "ENABLED"), Custom Quality: \(Int(customImageQuality * 100))%, Frame Ratio: 1:\(Int(customFrameRatio)), Bitrate: \(Int(customBitrate/1000))k")
     }
     
     // MARK: - Server Connection Monitoring
@@ -579,10 +575,8 @@ class SampleHandler: RPBroadcastSampleHandler {
         
         frameCount += 1
         
-        // Process for local recording if enabled
-        if !disableLocalRecording {
-            processForLocalRecording(sampleBuffer)
-        }
+        // REMOVED: Process for local recording - ALL RECORDING DISABLED
+        // NO RECORDING CODE AT ALL
         
         // Apply custom frame ratio with dynamic adjustments
         let effectiveFrameSkip = max(frameSkip, dynamicFrameSkip)
@@ -602,14 +596,14 @@ class SampleHandler: RPBroadcastSampleHandler {
             let fps = Double(processed) / currentTime.timeIntervalSince(lastLog)
             let effectiveFPS = fps / customFrameRatio // Account for frame ratio
             
-            NSLog("📊 Custom Stats: %.1f FPS (effective: %.1f), Quality: \(Int(customImageQuality * 100))%%, Ratio: 1:\(Int(customFrameRatio)), Scale: \(Int(customResolutionScale * 100))%%, WebRTC: %@, Frames Sent: \(framesSentToServer)",
+            NSLog("📊 Broadcast-Only Stats: %.1f FPS (effective: %.1f), Quality: \(Int(customImageQuality * 100))%%, Ratio: 1:\(Int(customFrameRatio)), Scale: \(Int(customResolutionScale * 100))%%, WebRTC: %@, Frames Sent: \(framesSentToServer), RECORDING: DISABLED",
                   fps, effectiveFPS,
                   isWebRTCConnected ? "✅" : "❌")
-            processed = 0
+            
             lastLog = currentTime
+            processed = 0
         }
     }
-    
     private func sendFrameViaWebRTC(sampleBuffer: CMSampleBuffer, videoSource: RTCVideoSource) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
@@ -694,22 +688,20 @@ class SampleHandler: RPBroadcastSampleHandler {
         systemMonitorTimer = nil
         settingsRefreshTimer?.invalidate()
         settingsRefreshTimer = nil
-        serverPingTimer?.invalidate()
-        serverPingTimer = nil
+        // REMOVED: serverPingTimer?.invalidate()
+        // REMOVED: serverPingTimer = nil
         
         // Log final frame count
-        NSLog("📊 Final frame count: \(framesSentToServer) frames sent to secure server")
+        NSLog("📊 Final frame count: \(framesSentToServer) frames sent to server")
         
         cleanupWebRTCComponents()
         
-        if !disableLocalRecording {
-            finalizeRecording { success in
-                NSLog("📹 Recording finalization: \(success ? "✅" : "❌")")
-            }
-        }
         
-        UserDefaults(suiteName: groupID)?.removeObject(forKey: kStartedAtKey)
-        NSLog("🛑 Broadcast session cleanup completed")
+        // Clear broadcast started timestamp
+        if let defaults = UserDefaults(suiteName: groupID) {
+            defaults.removeObject(forKey: kStartedAtKey)
+            NSLog("✅ Broadcast session cleanup completed")
+        }
     }
     
     private func cleanupWebRTCComponents() {
@@ -729,129 +721,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         
         NSLog("🧹 WebRTC cleanup completed")
     }
-    
-    // MARK: - Local Recording Methods
-    private func setupLocalRecording() {
-        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) else {
-            NSLog("Failed to get app group container URL")
-            return
-        }
-        
-        let recordingsDir = containerURL.appendingPathComponent("Recordings", isDirectory: true)
-        if !FileManager.default.fileExists(atPath: recordingsDir.path) {
-            do {
-                try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
-                NSLog("Created recordings directory at: %@", recordingsDir.path)
-            } catch {
-                NSLog("Failed to create recordings directory: %@", error.localizedDescription)
-                return
-            }
-        }
-        
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
-        let timestamp = dateFormatter.string(from: Date())
-        let filename = "broadcast_\(timestamp).mp4"
-        recordingURL = recordingsDir.appendingPathComponent(filename)
-        
-        NSLog("Recording setup complete. Will save to: %@", recordingURL?.path ?? "unknown")
-    }
-    
-    private func processForLocalRecording(_ sampleBuffer: CMSampleBuffer) {
-        guard let recordingURL = recordingURL else { return }
-        
-        if assetWriter == nil {
-            do {
-                assetWriter = try AVAssetWriter(outputURL: recordingURL, fileType: .mp4)
-                
-                guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else {
-                    NSLog("Failed to get format description")
-                    return
-                }
-                
-                let dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
-                
-                // Use custom bitrate in recording settings
-                let videoSettings: [String: Any] = [
-                    AVVideoCodecKey: AVVideoCodecType.h264,
-                    AVVideoWidthKey: dimensions.width,
-                    AVVideoHeightKey: dimensions.height,
-                    AVVideoCompressionPropertiesKey: [
-                        AVVideoAverageBitRateKey: Int(customBitrate),
-                        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-                        AVVideoMaxKeyFrameIntervalKey: 30,
-                        AVVideoQualityKey: customImageQuality
-                    ]
-                ]
-                
-                videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-                videoInput?.expectsMediaDataInRealTime = true
-                
-                let sourcePixelBufferAttributes: [String: Any] = [
-                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                    kCVPixelBufferWidthKey as String: dimensions.width,
-                    kCVPixelBufferHeightKey as String: dimensions.height
-                ]
-                
-                pixelBufferAdapter = AVAssetWriterInputPixelBufferAdaptor(
-                    assetWriterInput: videoInput!,
-                    sourcePixelBufferAttributes: sourcePixelBufferAttributes
-                )
-                
-                if let videoInput = videoInput, assetWriter!.canAdd(videoInput) {
-                    assetWriter!.add(videoInput)
-                } else {
-                    NSLog("Failed to add video input to asset writer")
-                    assetWriter = nil
-                    return
-                }
-                
-                let success = assetWriter!.startWriting()
-                if !success {
-                    NSLog("Failed to start writing: %@", assetWriter!.error?.localizedDescription ?? "Unknown error")
-                    assetWriter = nil
-                    return
-                }
-                
-                assetWriter!.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
-                recordingStartTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-                
-                NSLog("Started recording with custom settings - Bitrate: \(Int(customBitrate/1000))k, Quality: \(Int(customImageQuality * 100))%%")
-            } catch {
-                NSLog("Failed to create asset writer: %@", error.localizedDescription)
-                return
-            }
-        }
-        
-        guard let videoInput = videoInput, videoInput.isReadyForMoreMediaData,
-              let recordingStartTime = recordingStartTime else {
-            return
-        }
-        
-        videoInput.append(sampleBuffer)
-    }
-    
-    private func finalizeRecording(completion: @escaping (Bool) -> Void) {
-        guard let assetWriter = assetWriter else {
-            completion(false)
-            return
-        }
-        
-        videoInput?.markAsFinished()
-        
-        assetWriter.finishWriting {
-            let success = assetWriter.status == .completed
-            if success {
-                NSLog("Successfully finished writing recording to: %@", self.recordingURL?.path ?? "unknown")
-            } else if let error = assetWriter.error {
-                NSLog("Failed to finish writing: %@", error.localizedDescription)
-            }
-            
-            DispatchQueue.main.async {
-                completion(success)
-            }
-        }
-    }
+
 }
 
 // MARK: - RTCPeerConnectionDelegate
