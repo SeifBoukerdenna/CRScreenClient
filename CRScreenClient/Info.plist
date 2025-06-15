@@ -2,29 +2,32 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-		<key>NSExceptionDomains</key>
-		<dict>
-			<key>api.tormentor.dev</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-			</dict>
-		</dict>
-	</dict>
-	<key>NSPictureInPictureUsageDescription</key>
-	<string>Allow Picture in Picture to continue viewing your broadcast while using other apps</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-		<string>processing</string>
-	</array>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>api.tormentor.dev</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+            </dict>
+        </dict>
+    </dict>
+    <key>NSCameraUsageDescription</key>
+    <string>Royal Trainer uses WebRTC technology for real-time screen broadcasting. While the app primarily captures your screen, the WebRTC framework may access camera capabilities as part of its media streaming infrastructure, even though camera recording is not used in this app.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Royal Trainer may access the microphone as part of the WebRTC streaming framework, though microphone recording is not currently used in this version of the app.</string>
+    <key>NSPictureInPictureUsageDescription</key>
+    <string>Allow Picture in Picture to continue viewing your broadcast while using other apps</string>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+    </array>
 </dict>
 </plist>
