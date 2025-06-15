@@ -1,12 +1,12 @@
 //  CRScreenClient/Core/Network/ConnectionMonitor.swift
-//  Updated 2025-06-04 – always includes the correct port (443/443)
+//  OPTIMIZED VERSION - Exponential backoff, reduced frequency
 
 import Foundation
 import Combine
 import Network
 import SwiftUI
 
-/// Monitors connection status to the server with ping/pong functionality
+/// Monitors connection status with smart exponential backoff
 class ConnectionMonitor: ObservableObject {
 
     // ───────────────────────────────────────────────────────────── MARК: Published
@@ -52,6 +52,14 @@ class ConnectionMonitor: ObservableObject {
     private var latencyHistory: [Double] = []
     private let maxLatencyHistory       = 10
 
+    // OPTIMIZATION: Exponential backoff for health checks
+    private var currentPingInterval: TimeInterval = 30.0  // Start at 30s instead of 10s
+    private let minPingInterval: TimeInterval = 30.0     // Minimum 30s when stable
+    private let maxPingInterval: TimeInterval = 300.0    // Max 5 minutes when failing
+    private var consecutiveFailures: Int = 0
+    private var consecutiveSuccesses: Int = 0
+    private let backoffMultiplier: Double = 2.0
+    
     // Networking helpers
     private let debugSettings: DebugSettings
     private let urlSession   : URLSession
@@ -61,15 +69,15 @@ class ConnectionMonitor: ObservableObject {
         self.debugSettings = debugSettings
 
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest  = 5
-        cfg.timeoutIntervalForResource = 10
+        cfg.timeoutIntervalForRequest  = 8  // Increased from 5s
+        cfg.timeoutIntervalForResource = 15 // Increased from 10s
         cfg.waitsForConnectivity       = false
         self.urlSession = URLSession(configuration: cfg)
 
         setupNetworkMonitoring()
-        startPeriodicPing()
+        startAdaptivePing()
 
-        Logger.info("ConnectionMonitor: initialized", to: Logger.app)
+        Logger.info("ConnectionMonitor: initialized with adaptive ping", to: Logger.app)
     }
 
     deinit {
@@ -81,7 +89,7 @@ class ConnectionMonitor: ObservableObject {
     func startMonitoring() {
         Logger.info("ConnectionMonitor: startMonitoring()", to: Logger.app)
         setupNetworkMonitoring()
-        startPeriodicPing()
+        startAdaptivePing()
     }
 
     func stopMonitoring() {
@@ -91,7 +99,11 @@ class ConnectionMonitor: ObservableObject {
         cancellables.removeAll()
     }
 
-    func pingServerNow() { Task { await performPing() } }
+    func pingServerNow() {
+        // Reset to faster ping when user manually requests
+        currentPingInterval = minPingInterval
+        Task { await performPing() }
+    }
 
     func incrementFramesSent()         { framesSentCount         += 1 }
     func incrementFramesAcknowledged() { framesAcknowledgedCount += 1 }
@@ -101,13 +113,15 @@ class ConnectionMonitor: ObservableObject {
         framesAcknowledgedCount = 0
     }
 
-    // ───────────────────────────────────────────────────────────── MARК: Private
+    // ───────────────────────────────────────────────────────────── MARК: OPTIMIZED Private Methods
     private func setupNetworkMonitoring() {
         networkMonitor?.cancel()
         networkMonitor = NWPathMonitor()
         networkMonitor?.pathUpdateHandler = { [weak self] path in
             DispatchQueue.main.async {
                 if path.status == .satisfied {
+                    // Network restored - reset backoff and ping immediately
+                    self?.resetBackoff()
                     self?.pingServerNow()
                 } else {
                     self?.connectionStatus  = .disconnected
@@ -118,22 +132,70 @@ class ConnectionMonitor: ObservableObject {
         networkMonitor?.start(queue: monitorQueue)
     }
 
-    private func startPeriodicPing() {
+    private func startAdaptivePing() {
         pingTimer?.invalidate()
-        pingTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+        
+        Logger.info("ConnectionMonitor: Starting adaptive ping with \(currentPingInterval)s interval", to: Logger.app)
+        
+        pingTimer = Timer.scheduledTimer(withTimeInterval: currentPingInterval, repeats: true) { [weak self] _ in
             Task { await self?.performPing() }
         }
-        Task { await performPing() } // first immediate ping
+        Task { await performPing() } // First immediate ping
     }
 
-    // Core ping routine
+    // OPTIMIZATION: Adaptive backoff logic
+    private func handlePingSuccess() {
+        consecutiveFailures = 0
+        consecutiveSuccesses += 1
+        
+        // After 3 consecutive successes, we can slow down pings
+        if consecutiveSuccesses >= 3 && currentPingInterval < maxPingInterval {
+            let newInterval = min(currentPingInterval * 1.5, maxPingInterval)
+            if newInterval != currentPingInterval {
+                currentPingInterval = newInterval
+                Logger.info("ConnectionMonitor: Slowing ping to \(currentPingInterval)s (stable connection)", to: Logger.app)
+                restartPingTimer()
+            }
+        }
+    }
+    
+    private func handlePingFailure() {
+        consecutiveSuccesses = 0
+        consecutiveFailures += 1
+        
+        // Exponential backoff on failures, but cap it
+        if consecutiveFailures >= 2 {
+            let newInterval = min(currentPingInterval * backoffMultiplier, maxPingInterval)
+            if newInterval != currentPingInterval {
+                currentPingInterval = newInterval
+                Logger.info("ConnectionMonitor: Backing off ping to \(currentPingInterval)s (failures: \(consecutiveFailures))", to: Logger.app)
+                restartPingTimer()
+            }
+        }
+    }
+    
+    private func resetBackoff() {
+        currentPingInterval = minPingInterval
+        consecutiveFailures = 0
+        consecutiveSuccesses = 0
+    }
+    
+    private func restartPingTimer() {
+        pingTimer?.invalidate()
+        startAdaptivePing()
+    }
+
+    // Core ping routine with adaptive behavior
     private func performPing() async {
         let start = Date()
         await MainActor.run { self.connectionStatus = .connecting }
 
         do {
             let healthURL = buildBaseURL().appendingPathComponent("health")
+            
+           
             Logger.debug("ConnectionMonitor: pinging \(healthURL)", to: Logger.app)
+            
 
             let (data, response) = try await urlSession.data(from: healthURL)
 
@@ -148,10 +210,12 @@ class ConnectionMonitor: ObservableObject {
                     connectionStatus  = .connected
                     isServerReachable = true
                     serverResponse    = parseHealthJSON(data) ?? "Server OK"
+                    handlePingSuccess() // OPTIMIZATION: Handle success
                 } else {
                     connectionStatus  = .error("HTTP \(http.statusCode)")
                     isServerReachable = false
                     serverResponse    = "HTTP \(http.statusCode)"
+                    handlePingFailure() // OPTIMIZATION: Handle failure
                 }
             }
 
@@ -160,6 +224,7 @@ class ConnectionMonitor: ObservableObject {
                 connectionStatus  = .error(error.localizedDescription)
                 isServerReachable = false
                 serverResponse    = "Connection failed: \(error.localizedDescription)"
+                handlePingFailure() // OPTIMIZATION: Handle failure
             }
         }
     }
@@ -203,7 +268,7 @@ class ConnectionMonitor: ObservableObject {
         c.scheme = secure ? "https" : "http"
         c.host   = host
         c.port   = port
-        return c.url!   // safe: all fields are valid
+        return c.url!
     }
 
     // Exposed to UI so ConnectionStatusView can show the endpoint
@@ -220,7 +285,8 @@ extension ConnectionMonitor {
             lastPing: lastPingTime,
             serverInfo: serverResponse,
             framesSent: framesSentCount,
-            framesAcknowledged: framesAcknowledgedCount
+            framesAcknowledged: framesAcknowledgedCount,
+            pingInterval: currentPingInterval // OPTIMIZATION: Show current interval
         )
     }
 }
@@ -233,6 +299,7 @@ struct ConnectionStatusViewModel {
     let serverInfo: String
     let framesSent: Int
     let framesAcknowledged: Int
+    let pingInterval: TimeInterval // OPTIMIZATION: Added ping interval
 
     var latencyText: String { latency > 0 ? String(format: "%.0f ms", latency) : "—" }
 
@@ -247,4 +314,13 @@ struct ConnectionStatusViewModel {
     }
 
     var frameDeliveryText: String { String(format: "%.1f %%", frameDeliveryRate) }
+    
+    // OPTIMIZATION: Show ping interval in UI
+    var pingIntervalText: String {
+        if pingInterval >= 60 {
+            return String(format: "%.0fm", pingInterval / 60)
+        } else {
+            return String(format: "%.0fs", pingInterval)
+        }
+    }
 }
